@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 사용자 프로필 규칙
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 초대 코드 규칙
+    match /inviteCodes/{codeId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && resource.data.createdBy == request.auth.uid;
+      allow update: if request.auth != null;
+    }
+    
+    // 연결 정보 규칙
+    match /connections/{connectionId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.parentId == request.auth.uid || 
+         resource.data.careProviderId == request.auth.uid);
+    }
+    
+    // 아이 정보 규칙
+    match /children/{childId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
+        (get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
+         get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid);
+    }
+    
+    // 주간 일정 규칙
+    match /weeklySchedules/{connectionId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/connections/$(connectionId)) &&
+        (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
+         get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+    }
+    
+    // 식사 계획 규칙
+    match /mealPlans/{connectionId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/connections/$(connectionId)) &&
+        (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
+         get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+    }
+    
+    // 투약 정보 규칙
+    match /medications/{medicationId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
+        (get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
+         get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid);
+    }
+    
+    // 특별 일정 규칙
+    match /specialSchedules/{scheduleId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
+        (get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
+         get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid);
+    }
+    
+    // 근무 일정 규칙
+    match /workSchedules/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
