@@ -39,3 +39,7 @@ ui-debug.log
 
 # Backup files
 *.backup
+
+# MCP Taskmaster 데이터
+.taskmaster-data/
+.cursor/

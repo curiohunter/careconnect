@@ -9,8 +9,8 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   connection: Connection | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, profile: Omit<UserProfile, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  signInWithGoogle: () => Promise<{ user: User; profile: UserProfile | null; isNewUser: boolean }>;
+  createProfile: (user: User, profileData: Omit<UserProfile, 'id' | 'email' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   refreshConnection: () => Promise<void>;
@@ -56,67 +56,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // 로그인
-  const signIn = async (email: string, password: string) => {
+  // Google 로그인
+  const signInWithGoogle = async () => {
     try {
       setLoading(true);
-      const { user: firebaseUser, profile } = await AuthService.signIn(email, password);
-      setUser(firebaseUser);
-      setUserProfile(profile);
-      
-      // 연결 정보 가져오기
-      if (profile?.connectionId) {
-        const { ConnectionService } = await import('../services/authService');
-        const connectionData = await ConnectionService.getConnection(profile.connectionId);
-        setConnection(connectionData);
-      }
-      
-      toast.success('로그인되었습니다.');
+      const result = await AuthService.signInWithGoogle();
+      // AuthService에서 반환된 결과를 그대로 반환
+      return result;
     } catch (error: any) {
-      console.error('로그인 오류:', error);
-      
-      // Firebase 오류 메시지 한국어화
-      let errorMessage = '로그인에 실패했습니다.';
-      if (error.code === 'auth/user-not-found') {
-        errorMessage = '존재하지 않는 계정입니다.';
-      } else if (error.code === 'auth/wrong-password') {
-        errorMessage = '잘못된 비밀번호입니다.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = '올바르지 않은 이메일 형식입니다.';
-      }
-      
-      toast.error(errorMessage);
+      console.error('Google 로그인 오류:', error);
       throw error;
     } finally {
       setLoading(false);
     }
   };
 
-  // 회원가입
-  const signUp = async (email: string, password: string, profile: Omit<UserProfile, 'id' | 'createdAt' | 'updatedAt'>) => {
+  // 사용자 프로필 생성
+  const createProfile = async (user: User, profileData: Omit<UserProfile, 'id' | 'email' | 'createdAt' | 'updatedAt'>) => {
     try {
-      setLoading(true);
-      const { user: firebaseUser, profile: userProfile } = await AuthService.signUp(email, password, profile);
-      setUser(firebaseUser);
-      setUserProfile(userProfile);
-      toast.success('회원가입이 완료되었습니다.');
-    } catch (error: any) {
-      console.error('회원가입 오류:', error);
-      
-      // Firebase 오류 메시지 한국어화
-      let errorMessage = '회원가입에 실패했습니다.';
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = '이미 사용 중인 이메일입니다.';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = '비밀번호가 너무 약합니다. (최소 6자리)';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = '올바르지 않은 이메일 형식입니다.';
-      }
-      
-      toast.error(errorMessage);
+      const profile = await AuthService.createUserProfile(user, profileData);
+      setUserProfile(profile);
+      toast.success('프로필이 생성되었습니다.');
+    } catch (error) {
+      console.error('프로필 생성 오류:', error);
+      toast.error('프로필 생성에 실패했습니다.');
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -174,8 +138,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     userProfile,
     connection,
     loading,
-    signIn,
-    signUp,
+    signInWithGoogle,
+    createProfile,
     signOut,
     updateProfile,
     refreshConnection

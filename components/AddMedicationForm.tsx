@@ -19,6 +19,9 @@ export const AddMedicationForm: React.FC<AddMedicationFormProps> = ({ onSubmit, 
   const [selectedChildId, setSelectedChildId] = useState<string | undefined>(
     medicationToEdit?.childId || (childrenInfo.length > 0 ? childrenInfo[0].id : undefined)
   );
+  const [date, setDate] = useState<string>(
+    medicationToEdit?.date || new Date().toISOString().split('T')[0]
+  );
 
   useEffect(() => {
     if (medicationToEdit) {
@@ -29,6 +32,7 @@ export const AddMedicationForm: React.FC<AddMedicationFormProps> = ({ onSubmit, 
       setStorage(medicationToEdit.storage);
       setNotes(medicationToEdit.notes || '');
       setSelectedChildId(medicationToEdit.childId);
+      setDate(medicationToEdit.date || new Date().toISOString().split('T')[0]);
     } else {
       // Reset form for adding new
       setSymptoms('');
@@ -38,6 +42,7 @@ export const AddMedicationForm: React.FC<AddMedicationFormProps> = ({ onSubmit, 
       setStorage(MedicationStorage.ROOM_TEMP);
       setNotes('');
       setSelectedChildId(childrenInfo.length > 0 ? childrenInfo[0].id : undefined);
+      setDate(new Date().toISOString().split('T')[0]);
     }
   }, [medicationToEdit, childrenInfo]);
 
@@ -54,6 +59,10 @@ export const AddMedicationForm: React.FC<AddMedicationFormProps> = ({ onSubmit, 
         alert('증상, 약 종류, 투약 시간은 필수입니다.');
         return;
     }
+    if (!date) {
+        alert('투약 날짜를 선택하세요.');
+        return;
+    }
     onSubmit({
       symptoms,
       medicationTypes: selectedMedTypes,
@@ -62,6 +71,7 @@ export const AddMedicationForm: React.FC<AddMedicationFormProps> = ({ onSubmit, 
       storage,
       notes,
       childId: selectedChildId,
+      date,
     });
     // onClose(); // Modal will be closed by Dashboard based on onAddMedication/onUpdateMedication
   };
@@ -84,6 +94,17 @@ export const AddMedicationForm: React.FC<AddMedicationFormProps> = ({ onSubmit, 
             </select>
         </div>
       )}
+      <div>
+        <label htmlFor="date" className="block text-sm font-medium text-gray-700">투약 날짜</label>
+        <input
+          type="date"
+          id="date"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+          required
+        />
+      </div>
       <div>
         <label htmlFor="symptoms" className="block text-sm font-medium text-gray-700">증상 (예: 콧물, 기침)</label>
         <input

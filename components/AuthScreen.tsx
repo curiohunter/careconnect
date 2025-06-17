@@ -1,36 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserType, UserProfile, ChildInfo, Gender, InstitutionType } from '../types';
 import { USER_TYPES, GENDER_OPTIONS, INSTITUTION_TYPE_OPTIONS } from '../constants';
 import { useAuth } from '../hooks/useAuth';
-import { InviteCodeService } from '../services/authService';
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
-import { EyeIcon } from './icons/EyeIcon';
-import { EyeSlashIcon } from './icons/EyeSlashIcon';
 import toast from 'react-hot-toast';
 
 interface AuthScreenProps {
-  onLogin: (profile: UserProfile, children: ChildInfo[]) => void;
+  onLogin: (profile: any, children: any[]) => void;
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
-  const { signIn, signUp, refreshConnection } = useAuth();
-  const [isLogin, setIsLogin] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showInviteCode, setShowInviteCode] = useState(false);
+  const { signInWithGoogle, createProfile, user, userProfile } = useAuth();
+  const [showSetupForm, setShowSetupForm] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-
-  // 로그인 폼 상태
-  const [loginForm, setLoginForm] = useState({
-    email: '',
-    password: ''
-  });
-
-  // 회원가입 폼 상태
-  const [signupForm, setSignupForm] = useState({
-    email: '',
-    password: '',
-    confirmPassword: '',
+  
+  // 로그인된 사용자가 있지만 프로필이 없으니 프로필 설정 화면 표시
+  useEffect(() => {
+    console.log('🔄 AuthScreen useEffect - user:', !!user, 'userProfile:', !!userProfile);
+    if (user && !userProfile) {
+      console.log('🏠 프로필 설정 화면 표시');
+      setCurrentUser(user);
+      setShowSetupForm(true);
+      setProfileForm(prev => ({
+        ...prev,
+        name: user.displayName || ''
+      }));
+    } else if (user && userProfile) {
+      console.log('✅ 사용자 로그인 완료 - Dashboard로 이동 예정');
+    } else {
+      console.log('🚀 로그인 대기 중');
+    }
+  }, [user, userProfile]);
+  
+  // 프로필 설정 폼 상태
+  const [profileForm, setProfileForm] = useState({
     name: '',
     contact: '',
     userType: UserType.PARENT as UserType,
@@ -49,74 +54,77 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
-  const inputBaseClasses = "mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm bg-white text-gray-900 placeholder-gray-500";
-  const selectBaseClasses = `${inputBaseClasses} bg-white`;
-  const buttonBaseClasses = "w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2";
-
-  // 로그인 처리
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!loginForm.email || !loginForm.password) {
-      toast.error('이메일과 비밀번호를 입력해주세요.');
-      return;
-    }
-
+  // Google 로그인 처리
+  const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
-      await signIn(loginForm.email, loginForm.password);
-      // AuthProvider에서 자동으로 사용자 정보 로드됨
-    } catch (error) {
-      // 오류는 AuthProvider에서 toast로 처리됨
+      await signInWithGoogle();
+      // 나머지는 useEffect에서 처리
+    } catch (error: any) {
+      console.error('Google 로그인 오류:', error);
+      
+      let errorMessage = '로그인에 실패했습니다.';
+      if (error.code === 'auth/popup-closed-by-user') {
+        errorMessage = '로그인이 취소되었습니다.';
+      } else if (error.code === 'auth/popup-blocked') {
+        errorMessage = '팝업이 차단되었습니다. 팝업을 허용해주세요.';
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // 회원가입 처리
-  const handleSignup = async (e: React.FormEvent) => {
+  // 프로필 설정 완료
+  const handleCompleteSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!signupForm.email || !signupForm.password || !signupForm.name || !signupForm.contact || !agreedToTerms) {
+    if (!profileForm.name || !profileForm.contact || !agreedToTerms) {
       toast.error('모든 필수 정보를 입력하고 약관에 동의해주세요.');
       return;
     }
 
-    if (signupForm.password !== signupForm.confirmPassword) {
-      toast.error('비밀번호가 일치하지 않습니다.');
-      return;
-    }
-
-    if (signupForm.password.length < 6) {
-      toast.error('비밀번호는 최소 6자리 이상이어야 합니다.');
-      return;
-    }
-
     // 부모의 경우 아이 정보 검증
-    if (signupForm.userType === UserType.PARENT) {
-      const validChildren = children.filter(child => child.name);
-      if (validChildren.length === 0) {
+    let validChildren: ChildInfo[] = [];
+    if (profileForm.userType === UserType.PARENT) {
+      const safeChildren = Array.isArray(children) ? children : [];
+      const childrenWithNames = safeChildren.filter(child => child.name && child.name.trim());
+      if (childrenWithNames.length === 0) {
         toast.error('최소 한 명의 아이 정보를 입력해주세요.');
         return;
       }
+      
+      // 아이 정보 가공
+      validChildren = childrenWithNames.map(child => ({
+        id: child.id || Date.now().toString(),
+        name: child.name!.trim(),
+        age: child.age,
+        gender: child.gender,
+        specialNeeds: child.specialNeeds?.trim() || '',
+        institutionType: child.institutionType || '해당없음',
+        institutionName: child.institutionType !== '해당없음' ? child.institutionName?.trim() : undefined
+      }));
     }
 
     try {
       setLoading(true);
       
-      const profile: Omit<UserProfile, 'id' | 'createdAt' | 'updatedAt'> = {
-        userType: signupForm.userType,
-        name: signupForm.name,
-        contact: signupForm.contact,
-        email: signupForm.email
+      const profileData = {
+        userType: profileForm.userType,
+        name: profileForm.name,
+        contact: profileForm.contact,
+        children: validChildren // 아이 정보 추가
       };
 
-      await signUp(signupForm.email, signupForm.password, profile);
+      await createProfile(currentUser, profileData);
+      toast.success('프로필 설정이 완료되었습니다!');
       
-      // 초대 코드 사용 처리는 회원가입 완료 후 자동으로 처리됨
+      // 초대 코드 처리는 추후 구현
       
     } catch (error) {
-      // 오류는 AuthProvider에서 toast로 처리됨
+      console.error('프로필 설정 오류:', error);
+      toast.error('프로필 설정에 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -143,141 +151,32 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
   const handleRemoveChild = (index: number) => {
     if (children.length > 1) {
-      setChildren(children.filter((_, i) => i !== index));
+      const safeChildren = Array.isArray(children) ? children : [];
+      setChildren(safeChildren.filter((_, i) => i !== index));
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-secondary p-4">
-      <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h1 className="text-3xl font-bold text-center text-primary mb-8">
-          CareConnect {isLogin ? '로그인' : '회원가입'}
-        </h1>
-        
-        {/* 로그인/회원가입 탭 */}
-        <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
-          <button
-            type="button"
-            onClick={() => setIsLogin(true)}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              isLogin ? 'bg-primary text-white' : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            로그인
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsLogin(false)}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              !isLogin ? 'bg-primary text-white' : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            회원가입
-          </button>
-        </div>
+  const inputBaseClasses = "mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm bg-white text-gray-900 placeholder-gray-500";
+  const selectBaseClasses = `${inputBaseClasses} bg-white`;
+  const buttonBaseClasses = "w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2";
 
-        {isLogin ? (
-          /* 로그인 폼 */
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">이메일</label>
-              <input
-                type="email"
-                id="email"
-                value={loginForm.email}
-                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                className={inputBaseClasses}
-                placeholder="example@email.com"
-                required
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">비밀번호</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="password"
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                  className={inputBaseClasses}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                >
-                  {showPassword ? <EyeSlashIcon className="w-5 h-5 text-gray-400" /> : <EyeIcon className="w-5 h-5 text-gray-400" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className={`${buttonBaseClasses} bg-primary hover:bg-blue-700 focus:ring-primary ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {loading ? '로그인 중...' : '로그인'}
-            </button>
-          </form>
-        ) : (
-          /* 회원가입 폼 */
-          <form onSubmit={handleSignup} className="space-y-6">
-            <div>
-              <label htmlFor="signup-email" className="block text-sm font-medium text-gray-700">이메일</label>
-              <input
-                type="email"
-                id="signup-email"
-                value={signupForm.email}
-                onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
-                className={inputBaseClasses}
-                placeholder="example@email.com"
-                required
-              />
-            </div>
-
-            <div>
-              <label htmlFor="signup-password" className="block text-sm font-medium text-gray-700">비밀번호</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="signup-password"
-                  value={signupForm.password}
-                  onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
-                  className={inputBaseClasses}
-                  placeholder="최소 6자리"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                >
-                  {showPassword ? <EyeSlashIcon className="w-5 h-5 text-gray-400" /> : <EyeIcon className="w-5 h-5 text-gray-400" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700">비밀번호 확인</label>
-              <input
-                type={showPassword ? "text" : "password"}
-                id="confirm-password"
-                value={signupForm.confirmPassword}
-                onChange={(e) => setSignupForm({ ...signupForm, confirmPassword: e.target.value })}
-                className={inputBaseClasses}
-                required
-              />
-            </div>
-
+  // 신규 사용자 프로필 설정 화면
+  if (showSetupForm) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-secondary p-4">        
+        <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <h1 className="text-3xl font-bold text-center text-primary mb-8">
+            프로필 설정
+          </h1>
+          
+          <form onSubmit={handleCompleteSetup} className="space-y-6">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">이름</label>
               <input
                 type="text"
                 id="name"
-                value={signupForm.name}
-                onChange={(e) => setSignupForm({ ...signupForm, name: e.target.value })}
+                value={profileForm.name}
+                onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
                 className={inputBaseClasses}
                 required
               />
@@ -288,8 +187,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               <input
                 type="tel"
                 id="contact"
-                value={signupForm.contact}
-                onChange={(e) => setSignupForm({ ...signupForm, contact: e.target.value })}
+                value={profileForm.contact}
+                onChange={(e) => setProfileForm({ ...profileForm, contact: e.target.value })}
                 className={inputBaseClasses}
                 placeholder="01012345678"
                 required
@@ -300,8 +199,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               <label htmlFor="userType" className="block text-sm font-medium text-gray-700">사용자 유형</label>
               <select
                 id="userType"
-                value={signupForm.userType}
-                onChange={(e) => setSignupForm({ ...signupForm, userType: e.target.value as UserType })}
+                value={profileForm.userType}
+                onChange={(e) => setProfileForm({ ...profileForm, userType: e.target.value as UserType })}
                 className={selectBaseClasses}
               >
                 {USER_TYPES.map(type => (
@@ -310,40 +209,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               </select>
             </div>
 
-            {/* 초대 코드 섹션 */}
-            <div>
-              <div className="flex items-center justify-between">
-                <label htmlFor="invite-code" className="block text-sm font-medium text-gray-700">
-                  초대 코드 (선택사항)
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowInviteCode(!showInviteCode)}
-                  className="text-sm text-primary hover:underline"
-                >
-                  {showInviteCode ? '숨기기' : '입력하기'}
-                </button>
-              </div>
-              {showInviteCode && (
-                <div className="mt-2">
-                  <input
-                    type="text"
-                    id="invite-code"
-                    value={signupForm.inviteCode}
-                    onChange={(e) => setSignupForm({ ...signupForm, inviteCode: e.target.value.toUpperCase() })}
-                    className={inputBaseClasses}
-                    placeholder="초대 코드 입력 (예: ABC123)"
-                    maxLength={6}
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    초대 코드가 있으면 상대방과 자동으로 연결됩니다.
-                  </p>
-                </div>
-              )}
-            </div>
-
             {/* 부모인 경우 아이 정보 입력 */}
-            {signupForm.userType === UserType.PARENT && (
+            {profileForm.userType === UserType.PARENT && (
               <div className="space-y-4">
                 <h3 className="text-md font-semibold text-gray-700">아이 정보 등록</h3>
                 {children.map((child, index) => (
@@ -448,17 +315,45 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               disabled={!agreedToTerms || loading}
               className={`${buttonBaseClasses} bg-primary hover:bg-blue-700 focus:ring-primary ${(!agreedToTerms || loading) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {loading ? '회원가입 중...' : '회원가입'}
+              {loading ? '설정 중...' : '프로필 설정 완료'}
             </button>
           </form>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  // 메인 로그인 화면
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-secondary p-4">      
+      <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-primary mb-4">CareConnect</h1>
+          <p className="text-gray-600">돌봄 선생님과 부모를 연결하는<br/>통합 정보 공유 플랫폼</p>
+        </div>
         
-        <p className="mt-6 text-center text-xs text-gray-500">
-          {isLogin ? 
-            '계정이 없으신가요? 회원가입 탭을 클릭하세요.' : 
-            '초대 코드는 가입 후 대시보드에서 생성하고 공유할 수 있습니다.'
-          }
-        </p>
+        <div className="space-y-4">
+          <button
+            onClick={handleGoogleSignIn}
+            disabled={loading}
+            className={`w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            {loading ? '로그인 중...' : 'Google로 시작하기'}
+          </button>
+          
+          <div className="text-center">
+            <p className="text-sm text-gray-500">
+              간편하고 안전한 Google 계정으로<br/>
+              CareConnect를 시작해보세요!
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

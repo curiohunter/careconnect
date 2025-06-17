@@ -10,6 +10,11 @@ import { AddMedicationForm } from './AddMedicationForm';
 import { AddSpecialScheduleItemForm } from './AddSpecialScheduleItemForm';
 import WorkScheduleSettings from './WorkScheduleSettings';
 import InviteCodeManager from './InviteCodeManager';
+import ChildrenManager from './ChildrenManager';
+import { ScheduleTemplateManager } from './ScheduleTemplateManager';
+import { DailyHandoverNotes } from './DailyHandoverNotes';
+import { ProviderSwitcher } from './ProviderSwitcher';
+import { SchedulePatternManager } from './SchedulePatternManager';
 import { LogoutIcon } from './icons/LogoutIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { SettingsIcon } from './icons/SettingsIcon';
@@ -18,14 +23,12 @@ export const Dashboard: React.FC = () => {
   const { user, userProfile, connection, signOut } = useAuth();
   const {
     children,
-    weeklySchedules,
     mealPlan,
     medications,
     specialScheduleItems,
     workSchedule,
     loading: dataLoading,
     saveChildren,
-    updateChildWeeklySchedule,
     updateMealPlan,
     addMedication,
     updateMedication,
@@ -33,15 +36,33 @@ export const Dashboard: React.FC = () => {
     toggleMedicationAdministered,
     addSpecialScheduleItem,
     updateSpecialScheduleItem,
-    markNoticeAsRead
+    deleteSpecialScheduleItem,
+    markNoticeAsRead,
+    currentWeekSchedules,
+    loadCurrentWeekSchedules,
+    updateDailySchedule,
+    currentWeekMealPlans,
+    loadCurrentWeekMealPlans,
+    updateDateBasedMealPlan,
+    checkAndMigrateMealPlan,
+    recurringTemplates,
+    loadRecurringTemplates,
+    saveRecurringTemplate,
+    deleteRecurringTemplate,
+    applyRecurringTemplate
   } = useData();
 
   const [activeModal, setActiveModal] = useState<ActiveModal | null>(null);
   const [showWorkScheduleSettings, setShowWorkScheduleSettings] = useState(false);
   const [showInviteCodeManager, setShowInviteCodeManager] = useState(false);
+  const [showChildrenManager, setShowChildrenManager] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [showSchedulePatternManager, setShowSchedulePatternManager] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(false);
+  const [editingMealPlan, setEditingMealPlan] = useState(false);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [editingMedication, setEditingMedication] = useState<any>(null);
+  const [editingSpecialItem, setEditingSpecialItem] = useState<any>(null);
 
   // 활성 아이 설정
   useEffect(() => {
@@ -51,6 +72,29 @@ export const Dashboard: React.FC = () => {
       setActiveChildId(null);
     }
   }, [children, activeChildId]);
+  
+  // 활성 아이가 변경될 때마다 템플릿 로드 (인댑스 오류 방지를 위해 비활성화)
+  // useEffect(() => {
+  //   if (activeChildId && loadRecurringTemplates) {
+  //     loadRecurringTemplates(activeChildId);
+  //   }
+  // }, [activeChildId, loadRecurringTemplates]);
+  
+  // 새로운 날짜별 스케줄 초기 로드
+  useEffect(() => {
+    if (connection && children.length > 0 && loadCurrentWeekSchedules) {
+      console.log('📅 현재 주 스케줄 초기 로드 시작');
+      loadCurrentWeekSchedules();
+    }
+  }, [connection, children, loadCurrentWeekSchedules]);
+
+  // 새로운 날짜별 식사 계획 초기 로드
+  useEffect(() => {
+    if (connection && loadCurrentWeekMealPlans) {
+      console.log('🍽️ 현재 주 식사 계획 초기 로드 시작');
+      loadCurrentWeekMealPlans();
+    }
+  }, [connection, loadCurrentWeekMealPlans]);
 
   // 로딩 상태
   if (dataLoading) {
@@ -122,12 +166,16 @@ export const Dashboard: React.FC = () => {
     if (modalType === 'edit_medication' && data) {
       setEditingMedication(data);
     }
+    if (modalType.startsWith('edit_') && modalType !== 'edit_medication' && data) {
+      setEditingSpecialItem(data);
+    }
     setActiveModal(modalType);
   };
   
   const closeModal = () => {
     setActiveModal(null);
     setEditingMedication(null);
+    setEditingSpecialItem(null);
   };
 
   const handleAddOrUpdateMedication = (formData: any) => {
@@ -139,9 +187,27 @@ export const Dashboard: React.FC = () => {
     closeModal();
   };
   
-  const handleAddSpecialItem = (item: any) => {
-    addSpecialScheduleItem(item);
+  const handleAddOrUpdateSpecialItem = (item: any) => {
+    if (editingSpecialItem) {
+      updateSpecialScheduleItem(editingSpecialItem.id, item);
+    } else {
+      addSpecialScheduleItem(item);
+    }
     closeModal();
+  };
+  
+  const handleEditSpecialItem = (item: any) => {
+    const modalType = item.type === 'OVERTIME_REQUEST' ? 'edit_overtime' : 
+                      item.type === 'VACATION' ? 'edit_vacation' : 'edit_notice';
+    openModal(modalType as ActiveModal, item);
+  };
+  
+  const handleDeleteSpecialItem = async (itemId: string) => {
+    try {
+      await deleteSpecialScheduleItem(itemId);
+    } catch (error) {
+      // 에러는 useData에서 처리
+    }
   };
   
   const mainChildName = activeChildId && children.find(c => c.id === activeChildId)?.name 
@@ -167,13 +233,29 @@ export const Dashboard: React.FC = () => {
                 >
                   초대 코드 관리
                 </button>
-                {userProfile?.userType === UserType.CARE_PROVIDER && (
+                {userProfile?.userType === UserType.PARENT && (
                   <button
-                    onClick={() => setShowWorkScheduleSettings(true)}
+                    onClick={() => setShowChildrenManager(true)}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
                   >
-                    근무 일정 설정
+                    아이 정보 관리
                   </button>
+                )}
+                {userProfile?.userType === UserType.CARE_PROVIDER && (
+                  <>
+                    <button
+                      onClick={() => setShowWorkScheduleSettings(true)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                    >
+                      근무 일정 설정
+                    </button>
+                    <button
+                      onClick={() => setShowSchedulePatternManager(true)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                    >
+                      근무 패턴 관리
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -193,35 +275,57 @@ export const Dashboard: React.FC = () => {
         <div className="bg-white p-6 rounded-lg shadow-lg">
            <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-primary">{mainChildName} 주간 일정표</h2>
-            <button 
-                onClick={() => setEditingSchedule(!editingSchedule)}
-                className="px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-amber-600 rounded-md transition-colors"
-            >
-                {editingSchedule ? '저장' : '일정 편집'}
-            </button>
+            {userProfile?.userType === UserType.PARENT && (
+              <div className="flex gap-2">
+                <button 
+                    onClick={() => {
+                      if (activeChildId) {
+                        setShowTemplateManager(true);
+                      }
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                >
+                    반복 일정
+                </button>
+                <button 
+                    onClick={() => setEditingSchedule(!editingSchedule)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-amber-600 rounded-md transition-colors"
+                >
+                    {editingSchedule ? '저장' : '일정 편집'}
+                </button>
+                <button 
+                    onClick={() => setEditingMealPlan(!editingMealPlan)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                >
+                    {editingMealPlan ? '저장' : '식사 편집'}
+                </button>
+              </div>
+            )}
            </div>
-          <TopSection 
-            childWeeklySchedules={weeklySchedules}
+          <TopSection
             activeChildId={activeChildId}
             childrenInfo={children}
             onActiveChildChange={setActiveChildId}
-            isEditing={editingSchedule}
-            onUpdateChildSchedule={updateChildWeeklySchedule}
+            isEditing={userProfile?.userType === UserType.PARENT ? editingSchedule : false}
             userType={userProfile?.userType || UserType.PARENT}
+            useNewDateBasedSchedule={true}
+            onExitEdit={() => setEditingSchedule(false)}
           />
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <MiddleSection
-            mealPlan={mealPlan}
+            currentWeekMealPlans={currentWeekMealPlans}
+            onUpdateDateBasedMealPlan={updateDateBasedMealPlan}
+            onEditModeChange={setEditingMealPlan}
+            onExitEdit={() => setEditingMealPlan(false)}
             medications={medications}
             childrenInfo={children}
             userType={userProfile?.userType || UserType.PARENT}
             onOpenModal={openModal}
             onToggleMedicationAdministered={toggleMedicationAdministered}
             onDeleteMedication={deleteMedication}
-            isEditingMealPlan={editingSchedule} 
-            onUpdateMealPlan={updateMealPlan}
+            isEditingMealPlan={editingMealPlan}
           />
         </div>
         
@@ -230,8 +334,46 @@ export const Dashboard: React.FC = () => {
             userType={userProfile?.userType || UserType.PARENT}
             onOpenModal={openModal}
             specialScheduleItems={specialScheduleItems}
-            onMarkNoticeAsRead={markNoticeAsRead}
+            onEditItem={handleEditSpecialItem}
+            onDeleteItem={handleDeleteSpecialItem}
           />
+        </div>
+
+        {/* 돌봄 선생님 선택 섹션 */}
+        {userProfile?.userType === UserType.PARENT && (
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-primary">담당 선생님</h2>
+            </div>
+            
+            <ProviderSwitcher
+              providers={[
+                {
+                  id: 'provider1',
+                  name: '김선생님',
+                  isActive: true,
+                  permissions: [],
+                  assignmentType: 'PRIMARY',
+                  workStatus: 'WORKING',
+                },
+                {
+                  id: 'provider2',
+                  name: '이선생님',
+                  isActive: true,
+                  permissions: [],
+                  assignmentType: 'SECONDARY',
+                  workStatus: 'AVAILABLE',
+                }
+              ]}
+              activeProviderId={'all'}
+              onProviderChange={(id) => console.log('선택된 선생님:', id)}
+            />
+          </div>
+        )}
+
+        {/* 인수인계 시스템 섹션 */}
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          {connection && <DailyHandoverNotes connectionId={connection.id} />}
         </div>
       </main>
 
@@ -265,7 +407,19 @@ export const Dashboard: React.FC = () => {
           <AddSpecialScheduleItemForm 
             type="OVERTIME_REQUEST" 
             currentUserType={userProfile?.userType || UserType.PARENT}
-            onSubmit={handleAddSpecialItem} 
+            onSubmit={handleAddOrUpdateSpecialItem} 
+            onClose={closeModal}
+          />
+        </Modal>
+      )}
+      
+      {activeModal === 'edit_overtime' && editingSpecialItem && (
+        <Modal isOpen={true} onClose={closeModal} title="연장 근무 수정">
+          <AddSpecialScheduleItemForm 
+            type="OVERTIME_REQUEST" 
+            currentUserType={userProfile?.userType || UserType.PARENT}
+            itemToEdit={editingSpecialItem}
+            onSubmit={handleAddOrUpdateSpecialItem} 
             onClose={closeModal}
           />
         </Modal>
@@ -276,7 +430,19 @@ export const Dashboard: React.FC = () => {
           <AddSpecialScheduleItemForm 
             type="VACATION" 
             currentUserType={userProfile?.userType || UserType.PARENT}
-            onSubmit={handleAddSpecialItem} 
+            onSubmit={handleAddOrUpdateSpecialItem} 
+            onClose={closeModal}
+          />
+        </Modal>
+      )}
+      
+      {activeModal === 'edit_vacation' && editingSpecialItem && (
+        <Modal isOpen={true} onClose={closeModal} title="휴가 수정">
+          <AddSpecialScheduleItemForm 
+            type="VACATION" 
+            currentUserType={userProfile?.userType || UserType.PARENT}
+            itemToEdit={editingSpecialItem}
+            onSubmit={handleAddOrUpdateSpecialItem} 
             onClose={closeModal}
           />
         </Modal>
@@ -287,7 +453,19 @@ export const Dashboard: React.FC = () => {
           <AddSpecialScheduleItemForm 
             type="NOTICE" 
             currentUserType={userProfile?.userType || UserType.PARENT}
-            onSubmit={handleAddSpecialItem} 
+            onSubmit={handleAddOrUpdateSpecialItem} 
+            onClose={closeModal}
+          />
+        </Modal>
+      )}
+      
+      {activeModal === 'edit_notice' && editingSpecialItem && (
+        <Modal isOpen={true} onClose={closeModal} title="안내사항 수정">
+          <AddSpecialScheduleItemForm 
+            type="NOTICE" 
+            currentUserType={userProfile?.userType || UserType.PARENT}
+            itemToEdit={editingSpecialItem}
+            onSubmit={handleAddOrUpdateSpecialItem} 
             onClose={closeModal}
           />
         </Modal>
@@ -302,6 +480,31 @@ export const Dashboard: React.FC = () => {
         isOpen={showInviteCodeManager}
         onClose={() => setShowInviteCodeManager(false)}
       />
+
+      <ChildrenManager 
+        isOpen={showChildrenManager}
+        onClose={() => setShowChildrenManager(false)}
+      />
+      
+      <SchedulePatternManager
+        isOpen={showSchedulePatternManager}
+        onClose={() => setShowSchedulePatternManager(false)}
+      />
+      
+      {activeChildId && userProfile?.userType === UserType.PARENT && (
+        <ScheduleTemplateManager
+          isOpen={showTemplateManager}
+          onClose={() => setShowTemplateManager(false)}
+          childId={activeChildId}
+          childName={children.find(c => c.id === activeChildId)?.name || '아이'}
+          allChildren={children.map(child => ({ id: child.id, name: child.name }))}
+          templates={recurringTemplates[activeChildId] || []}
+          onSaveTemplate={saveRecurringTemplate}
+          onDeleteTemplate={(templateId) => deleteRecurringTemplate(templateId, activeChildId)}
+          onApplyTemplate={(templateId) => applyRecurringTemplate(templateId, activeChildId)}
+          onLoadTemplates={loadRecurringTemplates}
+        />
+      )}
     </div>
   );
 };

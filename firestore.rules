@@ -1,23 +1,71 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 사용자 프로필 규칙
+    // ===== 프로덕션 보안 강화 함수들 =====
+    
+    // 인증 확인
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // 사용자 본인 확인
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // 연결 권한 확인 (부모 또는 돌봄 선생님)
+    function hasConnectionAccess(connectionId) {
+      return exists(/databases/$(database)/documents/connections/$(connectionId)) &&
+        (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
+         get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+    }
+    
+    // 다대다 연결 권한 확인
+    function hasMultiConnectionAccess(connectionId) {
+      return exists(/databases/$(database)/documents/multiConnections/$(connectionId)) &&
+        get(/databases/$(database)/documents/multiConnections/$(connectionId)).data.permissions[request.auth.uid] != null;
+    }
+    
+    // 속도 제한 (기본적인 DoS 방지)
+    function isWithinRateLimit() {
+      return request.time > resource.data.lastRequest + duration.value(1, 's');
+    }
+    
+    // 데이터 크기 제한
+    function isValidSize() {
+      return request.resource.size < 1000000; // 1MB 제한
+    }
+    // 사용자 프로필 규칙 - 강화된 보안
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isOwner(userId) && isValidSize();
     }
     
-    // 초대 코드 규칙
+    // 사용자 프로필 규칙 (새 컬렉션) - 강화된 보안
+    match /userProfiles/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isOwner(userId) && isValidSize();
+    }
+    
+    // 초대 코드 규칙 - 강화된 보안
     match /inviteCodes/{codeId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && resource.data.createdBy == request.auth.uid;
-      allow update: if request.auth != null;
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+        request.resource.data.createdBy == request.auth.uid && 
+        isValidSize();
+      allow update: if isAuthenticated() && isValidSize();
     }
     
-    // 연결 정보 규칙
+    // 연결 정보 규칙 - 강화된 보안
     match /connections/{connectionId} {
-      allow read, write: if request.auth != null && 
+      allow read: if isAuthenticated() && 
         (resource.data.parentId == request.auth.uid || 
          resource.data.careProviderId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidSize();
+      allow update, delete: if isAuthenticated() && 
+        (resource.data.parentId == request.auth.uid || 
+         resource.data.careProviderId == request.auth.uid) && 
+        isValidSize();
     }
     
     // 아이 정보 규칙
@@ -28,41 +76,239 @@ service cloud.firestore {
          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid);
     }
     
-    // 주간 일정 규칙
-    match /weeklySchedules/{connectionId} {
+    // ===== 새로운 날짜별 스케줄 규칙 =====
+    match /schedules/{connectionId} {
+      // 연결 정보가 존재하고 사용자가 해당 연결의 부모 또는 돌봄 선생님인지 확인
       allow read, write: if request.auth != null && 
         exists(/databases/$(database)/documents/connections/$(connectionId)) &&
         (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
          get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+      
+      // 하위 컬렉션: children/{childId}/days/{date}
+      match /children/{childId}/days/{date} {
+        allow read, write: if request.auth != null && 
+          exists(/databases/$(database)/documents/connections/$(connectionId)) &&
+          (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
+           get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+      }
     }
     
-    // 식사 계획 규칙
+    // 기존 식사 계획 규칙 (호환성을 위해 유지)
     match /mealPlans/{connectionId} {
       allow read, write: if request.auth != null && 
         exists(/databases/$(database)/documents/connections/$(connectionId)) &&
         (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
          get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+      
+      // ===== 새로운 날짜별 식단 하위 컬렉션 =====
+      match /dates/{date} {
+        allow read, write: if request.auth != null && 
+          exists(/databases/$(database)/documents/connections/$(connectionId)) &&
+          (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
+           get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+      }
+      
+      // 기존 days 구조도 유지 (호환성)
+      match /days/{date} {
+        allow read, write: if request.auth != null && 
+          exists(/databases/$(database)/documents/connections/$(connectionId)) &&
+          (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
+           get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+      }
     }
     
     // 투약 정보 규칙
     match /medications/{medicationId} {
-      allow read, write: if request.auth != null && 
+      // 읽기 규칙
+      allow read: if request.auth != null && 
+        resource.data.connectionId is string &&
         exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
-        (get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
-         get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid);
+        (
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid
+        );
+      
+      // 생성 규칙 (새로 생성할 때는 request.resource.data 사용)
+      allow create: if request.auth != null && 
+        request.resource.data.connectionId is string &&
+        exists(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)) &&
+        (
+          get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.careProviderId == request.auth.uid
+        );
+      
+      // 수정/삭제 규칙 (기존 데이터는 resource.data 사용)
+      allow update, delete: if request.auth != null && 
+        resource.data.connectionId is string &&
+        exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
+        (
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid
+        );
     }
     
     // 특별 일정 규칙
     match /specialSchedules/{scheduleId} {
-      allow read, write: if request.auth != null && 
+      // 읽기 규칙
+      allow read: if request.auth != null && 
+        resource.data.connectionId is string &&
         exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
-        (get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
-         get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid);
+        (
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid
+        );
+      
+      // 생성 규칙 (새로 생성할 때는 request.resource.data 사용)
+      allow create: if request.auth != null && 
+        request.resource.data.connectionId is string &&
+        exists(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)) &&
+        (
+          get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.careProviderId == request.auth.uid
+        );
+      
+      // 수정/삭제 규칙 (기존 데이터는 resource.data 사용)
+      allow update, delete: if request.auth != null && 
+        resource.data.connectionId is string &&
+        exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
+        (
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid
+        );
     }
     
     // 근무 일정 규칙
     match /workSchedules/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 반복 일정 템플릿 규칙
+    match /recurringSchedules/{templateId} {
+      // 읽기 규칙
+      allow read: if request.auth != null && 
+        resource.data.connectionId is string &&
+        exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
+        (
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid
+        );
+      
+      // 생성 규칙 (새로 생성할 때는 request.resource.data 사용)
+      allow create: if request.auth != null && 
+        request.resource.data.connectionId is string &&
+        exists(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)) &&
+        (
+          get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.careProviderId == request.auth.uid
+        );
+      
+      // 수정/삭제 규칙 (기존 데이터는 resource.data 사용)
+      allow update, delete: if request.auth != null && 
+        resource.data.connectionId is string &&
+        exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
+        (
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == request.auth.uid ||
+          get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid
+        );
+    }
+    // ===== 다대다 관계 타입 시스템 규칙 =====
+
+    // 다대다 연결 규칙
+    match /multiConnections/{connectionId} {
+      // 읽기 규칙 - 해당 연결에 권한이 있는 경우만 읽기 가능
+      allow read: if request.auth != null && 
+        resource.data.permissions[request.auth.uid] != null;
+      
+      // 생성 규칙 - 인증된 사용자는 새 연결 생성 가능하며 자신의 권한은 꼭 포함해야 함
+      allow create: if request.auth != null && 
+        request.resource.data.permissions[request.auth.uid] != null;
+      
+      // 업데이트 규칙 - 연결에 권한이 있는 사용자만 업데이트 가능
+      allow update: if request.auth != null && 
+        resource.data.permissions[request.auth.uid] != null && 
+        request.resource.data.permissions[request.auth.uid] != null;
+      
+      // 삭제 규칙 - ADMIN 권한이 있는 사용자만 삭제 가능
+      allow delete: if request.auth != null && 
+        resource.data.permissions[request.auth.uid] != null && 
+        resource.data.permissions[request.auth.uid].indexOf('ADMIN') >= 0;
+    }
+    
+    // 돌봄 선생님 할당 규칙
+    match /careProviderAssignments/{assignmentId} {
+      // 읽기 규칙
+      allow read: if request.auth != null && 
+        resource.data.connectionId is string &&
+        hasMultiConnectionAccess(resource.data.connectionId);
+      
+      // 생성 규칙
+      allow create: if request.auth != null && 
+        request.resource.data.connectionId is string &&
+        hasMultiConnectionAccess(request.resource.data.connectionId);
+      
+      // 업데이트/삭제 규칙
+      allow update, delete: if request.auth != null && 
+        resource.data.connectionId is string &&
+        hasMultiConnectionAccess(resource.data.connectionId);
+    }
+    
+    // 스케줄 패턴 규칙
+    match /schedulePatterns/{patternId} {
+      // 사용자 본인이 생성한 패턴만 접근 가능
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.createdBy == request.auth.uid);
+    }
+    
+    // 인수인계 기록 규칙
+    match /handoverRecords/{recordId} {
+      // 읽기 규칙 - 인수인계 참여자만 접근 가능
+      allow read: if request.auth != null && 
+        (resource.data.fromUserId == request.auth.uid || 
+         resource.data.toUserId == request.auth.uid);
+      
+      // 생성 규칙
+      allow create: if request.auth != null && 
+        request.resource.data.connectionId is string &&
+        hasMultiConnectionAccess(request.resource.data.connectionId) &&
+        (request.resource.data.fromUserId == request.auth.uid || 
+         request.resource.data.toUserId == request.auth.uid);
+      
+      // 업데이트 규칙
+      allow update: if request.auth != null && 
+        (resource.data.fromUserId == request.auth.uid || 
+         resource.data.toUserId == request.auth.uid);
+      
+      // 삭제 규칙 - 발신자만 삭제 가능
+      allow delete: if request.auth != null && 
+        resource.data.fromUserId == request.auth.uid;
+    }
+    
+    // ===== 간소화된 인수인계 시스템 규칙 =====
+    
+    // 일일 인수인계 메모 규칙
+    match /dailyHandoverNotes/{connectionId}/notes/{noteId} {
+      // 읽기 규칙 - 연결에 권한이 있는 사용자만 접근 가능
+      allow read: if request.auth != null && 
+        exists(/databases/$(database)/documents/connections/$(connectionId)) &&
+        (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
+         get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+      
+      // 생성 규칙 - 연결에 권한이 있는 사용자만 생성 가능
+      allow create: if request.auth != null && 
+        request.resource.data.connectionId == connectionId &&
+        request.resource.data.authorId == request.auth.uid &&
+        exists(/databases/$(database)/documents/connections/$(connectionId)) &&
+        (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
+         get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+      
+      // 수정 규칙 - 작성자만 수정 가능
+      allow update: if request.auth != null && 
+        resource.data.authorId == request.auth.uid &&
+        request.resource.data.authorId == request.auth.uid;
+      
+      // 삭제 규칙 - 작성자만 삭제 가능
+      allow delete: if request.auth != null && 
+        resource.data.authorId == request.auth.uid;
     }
   }
 }

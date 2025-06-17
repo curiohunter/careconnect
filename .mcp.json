@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "shrimp-task-manager": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-shrimp-task-manager"
+      ],
+      "env": {
+        "DATA_DIR": "/Users/ian/project/claude_project/careconnect/.taskmaster-data",
+        "TEMPLATES_USE": "templates_en",
+        "ENABLE_GUI": "true",
+        "ENABLE_THOUGHT_CHAIN": "true",
+        "ENABLE_RESEARCH_MODE": "true",
+        "MCP_PROMPT_PLAN_TASK_APPEND": "CareConnect 특화 계획 지침: React 19 + TypeScript 5.7 + Firebase 10 스택 사용, types.ts → services → hooks → components 순서 준수",
+        "MCP_PROMPT_EXECUTE_TASK_APPEND": "CareConnect 실행 시 필수 확인사항: TypeScript 컴파일 성공, Firebase 규칙 준수, 백업 파일 보호"
+      }
+    },
+
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "env": {}
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "sbp_f65d838af34af966de9871bdfccf8847d2b1e223",
+        "--project-ref",
+        "zeolpqtmlqzskvmhbyct"
+      ]
+    }
+  }
+}

@@ -33,7 +33,7 @@ export const WorkScheduleSettings: React.FC<WorkScheduleSettingsProps> = ({ isOp
   }, [workSchedule]);
 
   const handleShiftChange = (day: DayOfWeek, field: 'startTime' | 'endTime', value: string) => {
-    setSchedule(prev => {
+    setSchedule((prev: WorkSchedule) => {
       const currentShift = prev[day];
       if (currentShift === 'OFF') return prev;
       
@@ -48,7 +48,7 @@ export const WorkScheduleSettings: React.FC<WorkScheduleSettingsProps> = ({ isOp
   };
 
   const handleToggleOff = (day: DayOfWeek) => {
-    setSchedule(prev => ({
+    setSchedule((prev: WorkSchedule) => ({
       ...prev,
       [day]: prev[day] === 'OFF' 
         ? { startTime: '09:00', endTime: '18:00' }
@@ -130,7 +130,7 @@ export const WorkScheduleSettings: React.FC<WorkScheduleSettingsProps> = ({ isOp
                       <input
                         type="time"
                         value={shift.startTime}
-                        onChange={(e) => handleShiftChange(day, 'startTime', e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleShiftChange(day, 'startTime', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
                       />
                     </div>
@@ -141,7 +141,7 @@ export const WorkScheduleSettings: React.FC<WorkScheduleSettingsProps> = ({ isOp
                       <input
                         type="time"
                         value={shift.endTime}
-                        onChange={(e) => handleShiftChange(day, 'endTime', e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleShiftChange(day, 'endTime', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
                       />
                     </div>

@@ -1,4 +1,4 @@
-import { DayOfWeek, WeeklyActivitySchedule, DailyMealPlan, Medication, MedicationType, MedicationStorage, UserType, Gender, Activity, InstitutionType } from './types';
+import { DayOfWeek, DailyActivities, DailyMealPlan, Medication, MedicationType, MedicationStorage, UserType, Gender, Activity, InstitutionType } from './types';
 
 export const DAYS_OF_WEEK: DayOfWeek[] = [
   DayOfWeek.MONDAY,
@@ -20,7 +20,7 @@ const createActivity = (description: string, startTime?: string, endTime?: strin
 });
 
 
-export const initialWeeklySchedule: WeeklyActivitySchedule = {
+export const initialWeeklySchedule: Record<DayOfWeek, DailyActivities> = {
   [DayOfWeek.MONDAY]: { 
     childcareActivities: [createActivity('미술놀이', '09:00', '10:00', '사랑 어린이집')], 
     afterSchoolActivities: [createActivity('영어수업', '16:00', '17:00')] 
@@ -66,6 +66,7 @@ export const initialMedications: Medication[] = [
     storage: MedicationStorage.REFRIGERATED,
     notes: '냉장보관된 시럽입니다.',
     administered: false,
+    date: '2024-12-12', // 날짜 추가
   },
   {
     id: 'med2',
@@ -76,6 +77,7 @@ export const initialMedications: Medication[] = [
     storage: MedicationStorage.ROOM_TEMP,
     notes: '가루약은 물에 타서, 알약은 식후 바로.',
     administered: true,
+    date: '2024-12-12', // 날짜 추가
   },
 ];
 

@@ -3,39 +3,60 @@ import { SpecialScheduleItem, UserType } from '../types';
 import { CalendarIcon } from './icons/CalendarIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { InformationCircleIcon } from './icons/InformationCircleIcon';
-import { CheckCircleIcon } from './icons/CheckCircleIcon'; 
-import { ActiveModal } from './MiddleSection'; // Import ActiveModal type for onOpenModal
+import { ActiveModal } from './MiddleSection';
 
 interface BottomSectionProps {
   userType: UserType;
-  onOpenModal: (type: Extract<ActiveModal, 'overtime' | 'vacation' | 'notice'>) => void; // Use Extract for specific types
+  onOpenModal: (type: Extract<ActiveModal, 'overtime' | 'vacation' | 'notice'>) => void;
   specialScheduleItems: SpecialScheduleItem[];
-  onMarkNoticeAsRead: (itemId: string) => void;
+  onEditItem: (item: SpecialScheduleItem) => void;
+  onDeleteItem: (itemId: string) => void;
 }
 
 export const BottomSection: React.FC<BottomSectionProps> = ({ 
     userType,
     onOpenModal,
     specialScheduleItems,
-    onMarkNoticeAsRead
+    onEditItem,
+    onDeleteItem
 }) => {
 
   const today = new Date();
   today.setHours(0,0,0,0); // For date comparison
 
-  const activeItems = specialScheduleItems.filter(item => {
-    if (item.type === 'NOTICE') {
-      const itemDate = new Date(item.date);
-      itemDate.setHours(0,0,0,0); 
-      const isPast = itemDate < today;
-      const isRecipient = item.creatorUserType !== userType;
-      
-      if (isPast && (item.isRead || !isRecipient)) { 
-          return false;
-      }
+  // 우선순위 정의: 안내(1), 연장근무(2), 휴가(3)
+  const getTypePriority = (type: string) => {
+    switch(type) {
+      case 'NOTICE': return 1; // 안내
+      case 'OVERTIME_REQUEST': return 2; // 연장근무
+      case 'VACATION': return 3; // 휴가
+      default: return 4;
     }
-    return true;
-  }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
+  };
+
+  const safeSpecialScheduleItems = Array.isArray(specialScheduleItems) ? specialScheduleItems : [];
+  const activeItems = safeSpecialScheduleItems.filter(item => {
+    // 휴가는 종료일을 기준으로, 나머지는 날짜를 기준으로 필터링
+    const targetDate = item.type === 'VACATION' && item.endDate 
+      ? new Date(item.endDate) 
+      : new Date(item.date);
+    
+    targetDate.setHours(0,0,0,0);
+    
+    // 해당 날짜가 지나면 (다음날부터) 숨김
+    return targetDate >= today;
+  }).sort((a, b) => {
+    // 1. 타입에 따른 우선순위 정렬
+    const typePriorityA = getTypePriority(a.type);
+    const typePriorityB = getTypePriority(b.type);
+    
+    if (typePriorityA !== typePriorityB) {
+      return typePriorityA - typePriorityB;
+    }
+    
+    // 2. 같은 타입이면 날짜 역순으로 정렬 (최신 날짜 먼저)
+    return new Date(b.date).getTime() - new Date(a.date).getTime();
+  });
 
   return (
     <section aria-labelledby="actions-heading">
@@ -70,48 +91,66 @@ export const BottomSection: React.FC<BottomSectionProps> = ({
           <ul className="space-y-3">
             {activeItems.map(item => {
               const itemDate = new Date(item.date);
-              const isPastNotice = item.type === 'NOTICE' && itemDate < today && itemDate.toDateString() !== today.toDateString();
-              const canMarkAsRead = item.type === 'NOTICE' && item.creatorUserType !== userType && !item.isRead;
+              
+              // 타입에 따른 배경 색상 설정
+              const getCardBgColor = () => {
+                switch(item.type) {
+                  case 'OVERTIME_REQUEST': return 'bg-blue-50 border-blue-200'; // 연장근무 - 파란색
+                  case 'VACATION': return 'bg-green-50 border-green-200'; // 휴가 - 초록색
+                  case 'NOTICE': return 'bg-yellow-50 border-yellow-200'; // 안내 - 노란색
+                  default: return 'bg-white border-gray-200';
+                }
+              };
 
               return (
-              <li key={item.id} className={`p-4 bg-white rounded-md border border-gray-200 shadow-sm ${isPastNotice && item.isRead ? 'opacity-60' : ''}`}>
-                <div className="flex justify-between items-start">
-                    <div>
-                        <p className="font-medium text-gray-800">
+                <li key={item.id} className={`p-4 rounded-md border shadow-sm ${getCardBgColor()}`}>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-800">
                         {item.type === 'OVERTIME_REQUEST' ? '연장근무' : item.type === 'VACATION' ? '휴가' : '안내'}: {item.title}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                            날짜: {itemDate.toLocaleDateString()}
-                            {item.type === 'OVERTIME_REQUEST' && item.startTime && item.endTime && (
-                                <span className="ml-2">({item.startTime} ~ {item.endTime})</span>
-                            )}
-                        </p>
+                      </p>
+                      <p className="text-sm text-gray-600">
+                          {/* 휴가 기간 표시 */}
+                          {item.type === 'VACATION' && item.startDate && item.endDate ? (
+                              <span>기간: {new Date(item.startDate).toLocaleDateString()} ~ {new Date(item.endDate).toLocaleDateString()}</span>
+                          ) : (
+                              <span>날짜: {itemDate.toLocaleDateString()}</span>
+                          )}
+                          
+                          {item.type === 'OVERTIME_REQUEST' && item.startTime && item.endTime && (
+                              <span className="ml-2">({item.startTime} ~ {item.endTime})</span>
+                          )}
+                          {item.type === 'VACATION' && item.targetUserType && (
+                              <span className="ml-2">({item.targetUserType === UserType.PARENT ? '부모' : '돌봄선생님'} 휴가)</span>
+                          )}
+                      </p>
+                      
+                      {item.details && <p className="text-sm text-gray-500 mt-2 whitespace-pre-line">{item.details}</p>}
                     </div>
-                    {item.type === 'NOTICE' && item.isRead && item.creatorUserType !== userType && (
-                         <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full flex items-center">
-                            <CheckCircleIcon className="w-4 h-4 mr-1" />
-                            읽음
-                        </span>
-                    )}
-                </div>
-                {item.details && <p className="text-sm text-gray-500 mt-1 whitespace-pre-line">{item.details}</p>}
-                
-                {item.type === 'OVERTIME_REQUEST' && item.isApproved !== undefined && (
-                    <p className={`mt-1 text-sm font-semibold ${item.isApproved ? 'text-green-600' : 'text-red-600'}`}>
-                        {item.isApproved ? '승인됨' : (item.isApproved === false ? '반려됨' : '승인 대기중')}
-                    </p>
-                )}
-
-                {canMarkAsRead && (
-                    <button
-                        onClick={() => onMarkNoticeAsRead(item.id)}
-                        className="mt-2 text-sm text-primary hover:underline focus:outline-none"
-                    >
-                        읽음으로 표시
-                    </button>
-                )}
-              </li>
-            )})}
+                    
+                    {/* 수정/삭제 버튼 */}
+                    <div className="flex gap-2 ml-4">
+                      <button
+                        onClick={() => onEditItem(item)}
+                        className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm('정말로 삭제하시겠습니까?')) {
+                            onDeleteItem(item.id);
+                          }
+                        }}
+                        className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

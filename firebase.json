@@ -14,11 +14,15 @@
     ],
     "headers": [
       {
-        "source": "/service-worker.js",
+        "source": "**",
         "headers": [
           {
-            "key": "Cache-Control",
-            "value": "no-cache"
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "same-origin-allow-popups"
+          },
+          {
+            "key": "Cross-Origin-Embedder-Policy",
+            "value": "unsafe-none"
           }
         ]
       }
@@ -27,8 +31,5 @@
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
-  },
-  "storage": {
-    "rules": "storage.rules"
   }
 }

@@ -66,7 +66,7 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
                     className="form-checkbox h-5 w-5 text-primary rounded focus:ring-primary"
                     />
                     <span className={`ml-2 font-medium ${medication.administered ? 'text-green-600' : 'text-red-600'}`}>
-                        {medication.administered ? '투약 완료됨' : '투약 필요'}
+                        투약 완료
                     </span>
                 </label>
             </div>
@@ -82,6 +82,7 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
         initiallyExpanded={isCareProvider && !medication.administered} // Expand if care provider and needs administration
     >
       <div className="space-y-3 text-sm">
+        <p><strong>날짜:</strong> {new Date(medication.date).toLocaleDateString()}</p>
         <p><strong>증상:</strong> {medication.symptoms}</p>
         <p>
           <strong>약 종류:</strong> 
@@ -97,21 +98,17 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
         {medication.notes && <p><strong>비고:</strong> {medication.notes}</p>}
         
         <div className="mt-4 pt-3 border-t flex justify-between items-center">
-          {!isCareProvider ? (
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={medication.administered}
-                onChange={() => onToggleAdministered(medication.id)}
-                className="form-checkbox h-5 w-5 text-primary rounded focus:ring-primary"
-              />
-              <span className="ml-2 text-gray-700 font-medium">투약 완료 확인</span>
-            </label>
-          ) : (
-             <p className={`font-medium ${medication.administered ? 'text-green-600' : 'text-red-600'}`}>
-                {medication.administered ? '투약 완료됨' : '투약 필요'}
-             </p>
-          )}
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={medication.administered}
+              onChange={() => onToggleAdministered(medication.id)}
+              className="form-checkbox h-5 w-5 text-primary rounded focus:ring-primary"
+            />
+            <span className={`ml-2 font-medium ${medication.administered ? 'text-green-600' : 'text-red-600'}`}>
+              투약 완료
+            </span>
+          </label>
 
           {userType === UserType.PARENT && (
             <div className="flex space-x-2">

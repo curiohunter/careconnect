@@ -1,26 +1,37 @@
 import React from 'react';
-import { DailyMealPlan, Medication, ChildInfo, DayOfWeek, UserType } from '../types';
-import { MealPlanTable } from './MealPlanTable';
+import { Medication, ChildInfo, UserType, DateRangeMealPlan, DailyMealPlanNew } from '../types';
+import { MealPlanEditor } from './MealPlanEditor';
 import { MedicationCard } from './MedicationCard';
 import { PlusIcon } from './icons/PlusIcon';
 
-export type ActiveModal = 'add_medication' | 'edit_medication' | 'overtime' | 'vacation' | 'notice';
+export type ActiveModal = 'add_medication' | 'edit_medication' | 'overtime' | 'vacation' | 'notice' | 'edit_overtime' | 'edit_vacation' | 'edit_notice';
 
 
 interface MiddleSectionProps {
-  mealPlan: DailyMealPlan;
+  // 날짜 기반 식사 계획
+  currentWeekMealPlans?: DateRangeMealPlan;
+  onUpdateDateBasedMealPlan?: (date: string, mealPlan: DailyMealPlanNew) => void;
+  onEditModeChange?: (editing: boolean) => void;
+  onExitEdit?: () => void;
+  
+  // 공통 props
   medications: Medication[];
   childrenInfo: ChildInfo[];
   userType: UserType;
-  onOpenModal: (modalType: ActiveModal, data?: any) => void; // data can be medicationToEdit
+  onOpenModal: (modalType: ActiveModal, data?: any) => void;
   onToggleMedicationAdministered: (id: string) => void;
   onDeleteMedication: (id: string) => void;
   isEditingMealPlan: boolean;
-  onUpdateMealPlan: (day: DayOfWeek, menu: string, notes: string) => void;
 }
 
 export const MiddleSection: React.FC<MiddleSectionProps> = ({
-  mealPlan,
+  // 날짜 기반 식사 계획
+  currentWeekMealPlans,
+  onUpdateDateBasedMealPlan,
+  onEditModeChange,
+  onExitEdit,
+  
+  // 공통 props
   medications,
   childrenInfo,
   userType,
@@ -28,10 +39,21 @@ export const MiddleSection: React.FC<MiddleSectionProps> = ({
   onToggleMedicationAdministered,
   onDeleteMedication,
   isEditingMealPlan,
-  onUpdateMealPlan,
 }) => {
-  const mainChildName = childrenInfo.length > 0 ? childrenInfo[0].name : "아이"; // This might need to adapt if multiple children selected
+  const mainChildName = childrenInfo.length > 0 ? childrenInfo[0].name : "아이";
   const isCareProvider = userType === UserType.CARE_PROVIDER;
+  
+
+  // 날짜가 지난 투약 정보 필터링
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  
+  const safeMedications = Array.isArray(medications) ? medications : [];
+  const activeMedications = safeMedications.filter(med => {
+    const medDate = new Date(med.date);
+    medDate.setHours(0,0,0,0);
+    return medDate >= today; // 오늘까지만 표시, 내일부터 사라짐
+  });
 
   const handleEditMedication = (med: Medication) => {
     onOpenModal('edit_medication', med);
@@ -39,14 +61,46 @@ export const MiddleSection: React.FC<MiddleSectionProps> = ({
   
   return (
     <section className="space-y-6">
+      {isEditingMealPlan && onExitEdit && (
+        <div>
+          <button
+            onClick={onExitEdit}
+            className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            식사 편집 종료
+          </button>
+        </div>
+      )}
+      
       <div>
-        <h3 className="text-xl font-semibold text-primary mb-3">식사 메뉴</h3>
-        <MealPlanTable 
-            plan={mealPlan} 
-            isEditing={isEditingMealPlan && !isCareProvider} // Only parents can edit
-            onUpdate={onUpdateMealPlan}
-            isCareProvider={isCareProvider}
-        />
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-semibold text-primary">식사 메뉴</h3>
+        </div>
+
+        {/* 날짜별 식사 계획 */}
+        {currentWeekMealPlans && onUpdateDateBasedMealPlan ? (
+          <MealPlanEditor
+            currentWeekMealPlans={currentWeekMealPlans}
+            isEditing={isEditingMealPlan && !isCareProvider}
+            onUpdate={onUpdateDateBasedMealPlan}
+            userType={userType}
+            onEditModeChange={onEditModeChange}
+          />
+        ) : (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-blue-800 text-sm">
+              📅 날짜별 식사 계획을 불러오는 중입니다...
+            </p>
+          </div>
+        )}
+
+        {/* 안내 메시지 */}
+        <div className="mt-3 text-xs text-gray-500">
+          <p>💡 날짜별 모드: 특정 날짜에 맞춤형 식사 계획을 설정할 수 있습니다.</p>
+        </div>
       </div>
       <div>
         <div className="flex justify-between items-center mb-3">
@@ -63,11 +117,11 @@ export const MiddleSection: React.FC<MiddleSectionProps> = ({
             </button>
           )}
         </div>
-        {medications.length === 0 ? (
+        {activeMedications.length === 0 ? (
           <p className="text-gray-500">등록된 투약 정보가 없습니다.</p>
         ) : (
           <div className="space-y-4">
-            {medications.map((med) => (
+            {activeMedications.map((med) => (
               <MedicationCard
                 key={med.id}
                 medication={med}
