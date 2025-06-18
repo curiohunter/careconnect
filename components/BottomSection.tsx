@@ -4,6 +4,7 @@ import { CalendarIcon } from './icons/CalendarIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { InformationCircleIcon } from './icons/InformationCircleIcon';
 import { ActiveModal } from './MiddleSection';
+import { useAuth } from '../hooks/useAuth';
 
 interface BottomSectionProps {
   userType: UserType;
@@ -20,9 +21,55 @@ export const BottomSection: React.FC<BottomSectionProps> = ({
     onEditItem,
     onDeleteItem
 }) => {
+  const { user, userProfile, connection, connections } = useAuth();
 
   const today = new Date();
   today.setHours(0,0,0,0); // For date comparison
+
+  // 작성자 이름 가져오기 함수
+  const getAuthorName = (item: SpecialScheduleItem): string => {
+    // 본인이 작성한 경우
+    if (item.createdBy === user?.uid) {
+      return userProfile?.name || '본인';
+    }
+    
+    // 연결된 상대방이 작성한 경우
+    if (connection) {
+      if (userType === UserType.PARENT) {
+        // 부모인 경우 돌봄선생님 이름 표시
+        return connection.careProviderProfile?.name || '돌봄선생님';
+      } else {
+        // 돌봄선생님인 경우 부모 이름 표시
+        return connection.parentProfile?.name || '부모님';
+      }
+    }
+    
+    // 기본값
+    return item.creatorUserType === UserType.PARENT ? '부모님' : '돌봄선생님';
+  };
+
+  // 담당자 정보 가져오기 함수 (연장근무용)
+  const getAssigneeInfo = (item: SpecialScheduleItem): string | null => {
+    if (item.type !== 'OVERTIME_REQUEST' || !item.targetUserId) {
+      return null;
+    }
+    
+    // 다중 연결에서 targetUserId에 해당하는 사용자 찾기
+    if (connections && connections.length > 0) {
+      for (const conn of connections) {
+        if (conn.careProviderId === item.targetUserId) {
+          return conn.careProviderProfile?.name || '담당 선생님';
+        }
+      }
+    }
+    
+    // 단일 연결에서 찾기 (하위 호환성)
+    if (connection?.careProviderId === item.targetUserId) {
+      return connection.careProviderProfile?.name || '담당 선생님';
+    }
+    
+    return '담당 선생님';
+  };
 
   // 우선순위 정의: 안내(1), 연장근무(2), 휴가(3)
   const getTypePriority = (type: string) => {
@@ -36,7 +83,7 @@ export const BottomSection: React.FC<BottomSectionProps> = ({
 
   const safeSpecialScheduleItems = Array.isArray(specialScheduleItems) ? specialScheduleItems : [];
   const activeItems = safeSpecialScheduleItems.filter(item => {
-    // 휴가는 종료일을 기준으로, 나머지는 날짜를 기준으로 필터링
+    // 날짜 기반 필터링
     const targetDate = item.type === 'VACATION' && item.endDate 
       ? new Date(item.endDate) 
       : new Date(item.date);
@@ -44,7 +91,43 @@ export const BottomSection: React.FC<BottomSectionProps> = ({
     targetDate.setHours(0,0,0,0);
     
     // 해당 날짜가 지나면 (다음날부터) 숨김
-    return targetDate >= today;
+    const isDateValid = targetDate >= today;
+    
+    // 권한별 필터링 (targetUserId 기반 개선)
+    if (userType === UserType.PARENT) {
+      // 부모는 모든 항목 표시
+      return isDateValid;
+    } else if (userType === UserType.CARE_PROVIDER) {
+      // 돌봄선생님 필터링 로직 개선
+      const isMyItem = item.createdBy === user?.uid; // 내가 작성한 항목
+      const isAssignedToMe = item.targetUserId === user?.uid; // 나에게 할당된 항목 (연장근무)
+      const isFromParent = item.creatorUserType === UserType.PARENT; // 부모가 작성한 항목
+      
+      // 안내사항은 항상 표시 (부모가 작성)
+      if (item.type === 'NOTICE') {
+        return isDateValid && isFromParent;
+      }
+      
+      // 연장근무: 나에게 할당되었거나 부모가 작성한 것 (타겟이 없는 경우)
+      if (item.type === 'OVERTIME_REQUEST') {
+        // targetUserId가 지정된 경우: 나에게 할당된 것만 표시
+        if (item.targetUserId) {
+          return isDateValid && isAssignedToMe;
+        }
+        // targetUserId가 없는 경우: 부모가 작성한 모든 연장근무 요청 표시
+        return isDateValid && isFromParent;
+      }
+      
+      // 휴가: 내가 작성한 것만
+      if (item.type === 'VACATION') {
+        return isDateValid && isMyItem;
+      }
+      
+      // 기타 항목: 기존 로직 유지
+      return isDateValid && (isMyItem || isFromParent);
+    }
+    
+    return isDateValid;
   }).sort((a, b) => {
     // 1. 타입에 따른 우선순위 정렬
     const typePriorityA = getTypePriority(a.type);
@@ -106,9 +189,22 @@ export const BottomSection: React.FC<BottomSectionProps> = ({
                 <li key={item.id} className={`p-4 rounded-md border shadow-sm ${getCardBgColor()}`}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <p className="font-medium text-gray-800">
-                        {item.type === 'OVERTIME_REQUEST' ? '연장근무' : item.type === 'VACATION' ? '휴가' : '안내'}: {item.title}
-                      </p>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="font-medium text-gray-800">
+                          {item.type === 'OVERTIME_REQUEST' ? '연장근무' : item.type === 'VACATION' ? '휴가' : '안내'}: {item.title}
+                        </p>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-full">
+                            {getAuthorName(item)}
+                          </span>
+                          {/* 담당자 정보 표시 (연장근무만) */}
+                          {getAssigneeInfo(item) && (
+                            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                              담당: {getAssigneeInfo(item)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                       <p className="text-sm text-gray-600">
                           {/* 휴가 기간 표시 */}
                           {item.type === 'VACATION' && item.startDate && item.endDate ? (

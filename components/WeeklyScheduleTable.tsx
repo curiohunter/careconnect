@@ -10,6 +10,38 @@ import {
   DateRangeSchedules
 } from '../types';
 import { DAYS_OF_WEEK, generateHourOptions, generateMinuteOptions } from '../constants';
+// 요일과 날짜 표시 함수
+const formatDayWithDate = (dayName: string, date: Date): string => {
+  const month = date.getMonth() + 1;
+  const dayOfMonth = date.getDate();
+  return `${dayName} ${month}/${dayOfMonth}`;
+};
+
+// 로컬 주간 날짜 계산 함수
+const getWeekDates = (): Date[] => {
+  const today = new Date();
+  const currentDay = today.getDay(); // 0: 일, 1: 월, ...
+  const monday = new Date(today);
+  const daysToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+  monday.setDate(today.getDate() + daysToMonday);
+  
+  const weekDates = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    weekDates.push(date);
+  }
+  return weekDates;
+};
+
+// 날짜 포맷팅 함수 (YYYY-MM-DD) - 로컬 시간 기준
+const formatDateLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { useData } from '../hooks/useData';
@@ -24,49 +56,20 @@ const generateShortHourOptions = () => {
   return hours;
 };
 
-// 분 옵션 생성 (10분 단위 - 00, 10, 20, 30, 40, 50)
-const generateTenMinuteOptions = () => {
+// 분 옵션 생성 (5분 단위 - 00, 05, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55)
+const generateFiveMinuteOptions = () => {
   const minutes = [];
-  for (let i = 0; i < 60; i += 10) {
+  for (let i = 0; i < 60; i += 5) {
     minutes.push(i.toString().padStart(2, '0'));
   }
   return minutes;
 };
 
 const SHORT_HOUR_OPTIONS = generateShortHourOptions();
-const TEN_MINUTE_OPTIONS = generateTenMinuteOptions();
+const FIVE_MINUTE_OPTIONS = generateFiveMinuteOptions();
 
-// 이번주 날짜 계산 함수
-const getWeekDates = () => {
-  const today = new Date();
-  const currentDay = today.getDay(); // 0 = 일요일, 1 = 월요일, ...
-  const monday = new Date(today);
-  
-  // 월요일로 조정 (일요일이 0이므로 월요일을 1로 맞춤)
-  const daysToMonday = currentDay === 0 ? -6 : 1 - currentDay;
-  monday.setDate(today.getDate() + daysToMonday);
-  
-  const weekDates = [];
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + i);
-    weekDates.push(date);
-  }
-  
-  return weekDates;
-};
 
-// 날짜 포맷팅 함수 (로컬 버전)
-const formatDateLocal = (date: Date): string => {
-  return date.toISOString().split('T')[0]; // YYYY-MM-DD
-};
 
-// 요일과 날짜를 함께 표시하는 함수
-const formatDayWithDate = (day: DayOfWeek, date: Date) => {
-  const month = date.getMonth() + 1;
-  const dayOfMonth = date.getDate();
-  return `${day} ${month}/${dayOfMonth}`;
-};
 
 interface TimeSelectorProps {
   time?: string; // Format "HH:MM"
@@ -125,7 +128,7 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({ time, onChange, disabled, p
         aria-label={`${prefix} 분`}
       >
         <option value="">분</option>
-        {TEN_MINUTE_OPTIONS.map(m => <option key={`${prefix}-m-${m}`} value={m}>{m}</option>)}
+        {FIVE_MINUTE_OPTIONS.map(m => <option key={`${prefix}-m-${m}`} value={m}>{m}</option>)}
       </select>
     </div>
   );
@@ -152,8 +155,29 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
 }) => {
   const inputBaseClasses = "flex-grow p-1 border border-gray-300 rounded-md text-sm resize-none h-16 bg-white text-gray-900 placeholder-gray-500 focus:ring-primary focus:border-primary";
   
-  const activityDescription = activity.description || (isChildCareActivity && childInstitutionName ? childInstitutionName : '');
-  const placeholderText = isChildCareActivity && childInstitutionName ? childInstitutionName : "활동 내용";
+  // 편집 모드에서는 실제 description 값만 사용 (자동 완성 방지)
+  const activityDescription = activity.description || '';
+  const placeholderText = isChildCareActivity ? 
+    (activity.institutionName || childInstitutionName || "기관명 또는 활동 내용") : 
+    "학원명 또는 활동 내용";
+
+  // 한글 입력을 위한 로컬 상태 (MealPlanEditor 방식과 동일)
+  const [localValue, setLocalValue] = useState(activityDescription);
+  
+  // activityDescription이 변경될 때 로컬 상태 동기화
+  useEffect(() => {
+    setLocalValue(activityDescription);
+  }, [activityDescription]);
+
+  // 입력값 변경 핸들러 (로컬 상태만 업데이트)
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setLocalValue(e.target.value);
+  };
+
+  // onBlur에서만 실제 저장 (MealPlanEditor와 동일한 방식)
+  const handleBlur = () => {
+    onActivityChange(activity.id, 'description', localValue);
+  };
 
   if (isEditing && !isCareProvider) {
     return (
@@ -177,8 +201,9 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
             />
         </div>
         <textarea
-          value={activityDescription}
-          onChange={(e) => onActivityChange(activity.id, 'description', e.target.value)}
+          value={localValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
           className={inputBaseClasses}
           rows={2}
           placeholder={placeholderText}
@@ -205,7 +230,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
             {activity.startTime || '--:--'} ~ {activity.endTime || '--:--'} - 
         </span>
       )}
-      {activityDescription || (isChildCareActivity ? (childInstitutionName || '-') : '-')}
+      {activityDescription || (isChildCareActivity ? (activity.institutionName || childInstitutionName || '-') : '-')}
     </li>
   );
 };
@@ -232,18 +257,30 @@ const ActivityCell: React.FC<ActivityCellProps> = ({
     childForSchedule
 }) => {
   const [localActivities, setLocalActivities] = useState<Activity[]>(activities);
+  const [isTyping, setIsTyping] = useState(false);
   const childInstitutionName = childForSchedule?.institutionType !== '해당없음' ? childForSchedule?.institutionName : undefined;
 
   useEffect(() => {
-    setLocalActivities(activities);
-  }, [activities]);
+    // 타이핑 중이 아닐 때만 외부 변경사항 반영
+    if (!isTyping) {
+      setLocalActivities(activities);
+    }
+  }, [activities, isTyping]);
 
   const handleActivityChange = (id: string, field: keyof Activity, value: string) => {
+    setIsTyping(true);
     const updatedActivities = localActivities.map(act => 
       act.id === id ? { ...act, [field]: value } : act
     );
     setLocalActivities(updatedActivities);
-    if (!isCareProvider) onUpdateActivities(updatedActivities); 
+    
+    // 디바운싱: 500ms 후에 업데이트 실행 및 타이핑 상태 해제
+    setTimeout(() => {
+      setIsTyping(false);
+      if (!isCareProvider) {
+        onUpdateActivities(updatedActivities);
+      }
+    }, 500);
   };
 
   const handleAddActivity = () => {
@@ -272,21 +309,6 @@ const ActivityCell: React.FC<ActivityCellProps> = ({
 
   if (isEditing && !isCareProvider) {
     let currentActivities = [...localActivities];
-    
-    // 기관 활동이고 활동이 비어있으면 기본 활동 생성 (평일만)
-    if (!isAfterSchool && currentActivities.length === 0 && !isWeekend) {
-      const defaultActivity: Activity = { 
-        id: `default-${day}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, 
-        description: childInstitutionName || '', 
-        startTime: '', 
-        endTime: '',
-        institutionName: childInstitutionName
-      };
-      currentActivities = [defaultActivity];
-      // 즉시 업데이트
-      setLocalActivities(currentActivities);
-      onUpdateActivities(currentActivities);
-    }
 
     return (
       <div>
@@ -314,9 +336,8 @@ const ActivityCell: React.FC<ActivityCellProps> = ({
     );
   }
 
-  // View mode - 주말 처리 개선
-  const displayActivities = activities.length > 0 ? activities : 
-    (!isAfterSchool && !isWeekend ? [{id: 'placeholder', description: childInstitutionName || '-', startTime: '', endTime: ''}] : []);
+  // View mode - 디폴트 활동 제거
+  const displayActivities = activities;
   
   // 표시할 활동이 없으면 "-" 표시
   if (displayActivities.length === 0) return <p className="text-sm text-gray-500">-</p>;
@@ -366,12 +387,7 @@ export const WeeklyScheduleTable: React.FC<WeeklyScheduleTableProps> = ({
   const isCareProvider = userType === UserType.CARE_PROVIDER;
   const weekDates = getWeekDates();
   
-  // 새로운 날짜별 데이터 관리 훅
-  const { updateMultipleDays } = useData();
   
-  // 기관 시간 일괄 설정 상태
-  const [bulkStartTime, setBulkStartTime] = useState('');
-  const [bulkEndTime, setBulkEndTime] = useState('');
   
   // 날짜별 방식일 때의 업데이트 핸들러
   const handleUpdateNew = (dateString: string, type: keyof DailyActivities, newActivities: Activity[]) => {
@@ -391,11 +407,6 @@ export const WeeklyScheduleTable: React.FC<WeeklyScheduleTableProps> = ({
   const getScheduleForDate = (dateString: string, day: DayOfWeek, type: keyof DailyActivities): Activity[] => {
     if (useNewDateBasedSchedule && currentWeekSchedules) {
       const dailySchedule = currentWeekSchedules[dateString];
-      console.log(`🔍 getScheduleForDate: ${dateString}, ${type}`, {
-        dailySchedule,
-        availableDates: Object.keys(currentWeekSchedules),
-        activities: dailySchedule ? dailySchedule[type] : []
-      });
       return dailySchedule ? dailySchedule[type] : [];
     } else if (schedule) {
       return schedule[day] ? schedule[day][type] : [];
@@ -403,197 +414,9 @@ export const WeeklyScheduleTable: React.FC<WeeklyScheduleTableProps> = ({
     return [];
   };
 
-  // 전체 기관 활동에 시간 적용 - 새로운 날짜별 방식
-  const applyBulkTimeNew = async () => {
-    if (!bulkStartTime || !bulkEndTime || !childForSchedule?.id) {
-      alert('시작 시간과 종료 시간을 모두 설정해주세요.');
-      return;
-    }
-
-    console.log('🔥 새로운 날짜별 일괄 적용 시작');
-
-    try {
-      // 평일만 적용 (월~금)
-      const weekdays = [DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY];
-      const updates = [];
-      
-      for (let i = 0; i < weekdays.length; i++) {
-        const day = weekdays[i];
-        const dateString = formatDateLocal(weekDates[i]); // 월요일부터 시작
-        const existingActivities = getScheduleForDate(dateString, day, 'childcareActivities');
-        
-        console.log(`📅 ${day} (${dateString}) 처리 시작`);
-        
-        let updatedActivities: Activity[];
-        
-        if (existingActivities.length > 0) {
-          // 기존 활동이 있으면 첫 번째 활동 수정
-          const uniqueId = `updated-${dateString}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          
-          updatedActivities = existingActivities.map((activity, actIndex) => 
-            actIndex === 0 
-              ? { 
-                  ...activity,
-                  id: uniqueId,
-                  startTime: bulkStartTime, 
-                  endTime: bulkEndTime,
-                  description: activity.description || childForSchedule?.institutionName || '',
-                  institutionName: childForSchedule?.institutionName
-                }
-              : activity
-          );
-          console.log(`✅ ${day} (${dateString}) 기존 활동 수정`);
-        } else {
-          // 활동이 없으면 새로 생성
-          const uniqueId = `new-${dateString}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          const newActivity: Activity = {
-            id: uniqueId,
-            description: childForSchedule?.institutionName || '',
-            startTime: bulkStartTime,
-            endTime: bulkEndTime,
-            institutionName: childForSchedule?.institutionName
-          };
-          updatedActivities = [newActivity];
-          console.log(`✅ ${day} (${dateString}) 새 활동 생성`);
-        }
-        
-        updates.push({
-          date: dateString,
-          activityType: 'childcareActivities' as const,
-          activities: updatedActivities
-        });
-      }
-      
-      // 일괄 업데이트 실행
-      if (updateMultipleDays && childForSchedule?.id) {
-        await updateMultipleDays(childForSchedule.id, updates);
-        console.log('🎉 새로운 날짜별 일괄 적용 완료!');
-      }
-      
-    } catch (error) {
-      console.error('❌ 새로운 날짜별 일괄 적용 실패:', error);
-      alert('일괄 적용에 실패했습니다.');
-    }
-  };
-  
-  // 기존 주간 방식의 일괄 적용 (호환성을 위해 유지)
-  const applyBulkTimeOld = async () => {
-    if (!bulkStartTime || !bulkEndTime) {
-      alert('시작 시간과 종료 시간을 모두 설정해주세요.');
-      return;
-    }
-
-    console.log('🔥🔥🔥 기존 주간 방식 일괄 적용 시작');
-
-    // 평일만 적용 (월~금)
-    const weekdays = [DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY];
-
-    // 순차적으로 하나씩 처리
-    for (let i = 0; i < weekdays.length; i++) {
-      const day = weekdays[i];
-      const currentChildcareActivities = schedule?.[day]?.childcareActivities || [];
-      
-      let updatedActivities: Activity[];
-
-      if (currentChildcareActivities.length > 0) {
-        // 기존 활동이 있으면 - 첫 번째 활동 수정
-        const uniqueTimestamp = Date.now() + i * 1000;
-        const newUniqueId = `fixed-${day}-${uniqueTimestamp}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        updatedActivities = currentChildcareActivities.map((activity, actIndex) => 
-          actIndex === 0 
-            ? { 
-                ...activity,
-                id: newUniqueId,
-                startTime: bulkStartTime, 
-                endTime: bulkEndTime,
-                description: activity.description || childForSchedule?.institutionName || '',
-                institutionName: childForSchedule?.institutionName
-              }
-            : activity
-        );
-        console.log(`✅ ${day} 기존 활동 수정 (새 ID):`, newUniqueId);
-      } else {
-        // 활동이 없으면 새로 생성
-        const uniqueTimestamp = Date.now() + i * 1000;
-        const uniqueId = `new-${day}-${uniqueTimestamp}-${Math.random().toString(36).substr(2, 9)}`;
-        const newActivity: Activity = {
-          id: uniqueId,
-          description: childForSchedule?.institutionName || '',
-          startTime: bulkStartTime,
-          endTime: bulkEndTime,
-          institutionName: childForSchedule?.institutionName
-        };
-        updatedActivities = [newActivity];
-        console.log(`✅ ${day} 새 활동 생성:`, uniqueId);
-      }
-
-      // 하나씩 순차 업데이트
-      try {
-        console.log(`🚀 ${day} 업데이트 실행 중... (${i + 1}/${weekdays.length})`);
-        if (onUpdateSchedule) {
-          onUpdateSchedule(day, 'childcareActivities', updatedActivities);
-        }
-        
-        // 각 업데이트 후 잠시 대기
-        await new Promise(resolve => setTimeout(resolve, 300));
-        console.log(`✅ ${day} 업데이트 완료!`);
-        
-      } catch (error) {
-        console.error(`❌ ${day} 업데이트 실패:`, error);
-      }
-    }
-
-    console.log('🎉🎉🎉 기존 주간 방식 전체 적용 완료!');
-    alert('평일(월~금)의 기관 활동 시간이 설정되었습니다!');
-  };
-
-  // 일괄 적용 함수 선택
-  const applyBulkTime = async () => {
-    if (useNewDateBasedSchedule) {
-      await applyBulkTimeNew();
-    } else {
-      await applyBulkTimeOld();
-    }
-  };
 
   return (
     <div className="overflow-x-auto">
-      {/* 기관 시간 일괄 설정 (편집 모드일 때만 표시) */}
-      {isEditing && !isCareProvider && (
-        <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <h3 className="text-sm font-semibold text-blue-800 mb-3">🏫 기관 시간 일괄 설정</h3>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-700">시작:</span>
-              <TimeSelector
-                time={bulkStartTime}
-                onChange={setBulkStartTime}
-                disabled={false}
-                prefix="bulk-start"
-              />
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-700">종료:</span>
-              <TimeSelector
-                time={bulkEndTime}
-                onChange={setBulkEndTime}
-                disabled={false}
-                prefix="bulk-end"
-              />
-            </div>
-            <button
-              onClick={applyBulkTime}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
-            >
-              전체 적용
-            </button>
-          </div>
-          <p className="text-xs text-gray-600 mt-2">
-            설정한 시간이 평일(월~금)의 기관 활동에 적용됩니다.
-          </p>
-        </div>
-      )}
       
       <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
         <thead className="bg-gray-50">

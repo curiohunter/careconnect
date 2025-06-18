@@ -58,16 +58,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
-      await signInWithGoogle();
-      // 나머지는 useEffect에서 처리
+      const result = await signInWithGoogle();
+      
+      if (result && result.isNewUser) {
+        // 신규 사용자의 경우 프로필 설정 화면으로
+        setCurrentUser(result.user);
+        setShowSetupForm(true);
+        setProfileForm(prev => ({
+          ...prev,
+          name: result.user.displayName || ''
+        }));
+      } else if (result && !result.isNewUser) {
+        // 기존 사용자는 자동으로 대시보드로 이동 (onAuthStateChanged에서 처리)
+        console.log('✅ 기존 사용자 로그인 완료');
+      }
     } catch (error: any) {
       console.error('Google 로그인 오류:', error);
       
       let errorMessage = '로그인에 실패했습니다.';
-      if (error.code === 'auth/popup-closed-by-user') {
+      if (error.code === 'auth/cancelled-popup-request') {
         errorMessage = '로그인이 취소되었습니다.';
       } else if (error.code === 'auth/popup-blocked') {
-        errorMessage = '팝업이 차단되었습니다. 팝업을 허용해주세요.';
+        errorMessage = '로그인 창이 차단되었습니다.';
       }
       
       toast.error(errorMessage);

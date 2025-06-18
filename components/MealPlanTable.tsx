@@ -35,13 +35,14 @@ export const MealPlanTable: React.FC<MealPlanTableProps> = ({ plan, isEditing, o
     onUpdate(day, localPlan[day]?.menu || '', localPlan[day]?.notes || '');
   };
 
-  // 이번주 날짜 계산 함수 추가
+  // 이번주 날짜 계산 함수 (로컬 시간 기준)
   const getWeekDates = () => {
     const today = new Date();
     const currentDay = today.getDay(); // 0: 일, 1: 월, ...
     const monday = new Date(today);
     const daysToMonday = currentDay === 0 ? -6 : 1 - currentDay;
     monday.setDate(today.getDate() + daysToMonday);
+    
     const weekDates = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date(monday);

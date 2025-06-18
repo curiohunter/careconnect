@@ -31,7 +31,7 @@ export const TopSection: React.FC<TopSectionProps> = ({
   useNewDateBasedSchedule = true,
   onExitEdit
 }) => {
-  const { currentWeekSchedules, updateDailySchedule } = useData();
+  const { currentWeekSchedules, updateDailySchedule, cleanupDuplicateActivities } = useData();
 
   let currentWeekData: DateRangeSchedules | undefined;
   if (useNewDateBasedSchedule && activeChildId) {
@@ -51,19 +51,6 @@ export const TopSection: React.FC<TopSectionProps> = ({
 
   return (
     <section aria-labelledby="weekly-schedule-heading">
-      {isEditing && onExitEdit && (
-        <div className="mb-4">
-          <button
-            onClick={onExitEdit}
-            className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-          >
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            일정 편집 종료
-          </button>
-        </div>
-      )}
       
       {childrenInfo.length > 1 && (
         <div className="mb-4 border-b border-gray-200">

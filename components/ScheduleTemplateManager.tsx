@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RecurringActivity, DayOfWeek, InstitutionType } from '../types';
 import { Modal } from './Modal';
+import { generateHourOptions, generateMinuteOptions } from '../constants';
 
 interface ScheduleTemplateManagerProps {
   isOpen: boolean;
@@ -8,24 +9,30 @@ interface ScheduleTemplateManagerProps {
   childId: string;
   childName: string;
   allChildren: { id: string; name: string }[]; // 전체 아이 목록 추가
-  templates: RecurringActivity[];
+  allTemplates: {[childId: string]: RecurringActivity[]}; // 모든 아이의 템플릿
   onSaveTemplate: (template: Omit<RecurringActivity, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onUpdateTemplate?: (templateId: string, template: Omit<RecurringActivity, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onDeleteTemplate: (templateId: string) => void;
-  onApplyTemplate: (templateId: string) => void;
+  onApplyTemplate: (templateId: string, isWeeklyRecurring?: boolean) => void;
   onLoadTemplates: (childId: string) => void; // 템플릿 로드 함수 추가
+  onChildChange?: (childId: string) => void; // 아이 변경 콜백 추가
 }
 
 interface TemplateFormData {
   name: string;
   activityType: 'childcare' | 'afterSchool';
-  startTime: string;
-  endTime: string;
+  startHour: string;
+  startMinute: string;
+  endHour: string;
+  endMinute: string;
   daysOfWeek: DayOfWeek[];
   institutionName?: string;
 }
 
 const INSTITUTION_TYPES: InstitutionType[] = ['어린이집', '유치원', '학교', '해당없음', '기타'];
 const ALL_DAYS = Object.values(DayOfWeek);
+const HOUR_OPTIONS = generateHourOptions();
+const MINUTE_OPTIONS = generateMinuteOptions(5); // 5분 간격
 
 // 일반적인 요일 패턴
 const COMMON_PATTERNS = {
@@ -41,19 +48,26 @@ export const ScheduleTemplateManager: React.FC<ScheduleTemplateManagerProps> = (
   childId,
   childName,
   allChildren,
-  templates,
+  allTemplates,
   onSaveTemplate,
+  onUpdateTemplate,
   onDeleteTemplate,
   onApplyTemplate,
-  onLoadTemplates
+  onLoadTemplates,
+  onChildChange
 }) => {
   const [selectedChildId, setSelectedChildId] = useState(childId);
   const [showForm, setShowForm] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [weeklyRecurringStates, setWeeklyRecurringStates] = useState<{[templateId: string]: boolean}>({});
+  const [localTemplates, setLocalTemplates] = useState<{[childId: string]: RecurringActivity[]}>({});
   const [formData, setFormData] = useState<TemplateFormData>({
     name: '',
     activityType: 'childcare',
-    startTime: '09:00', // 기본값 09:00 (10분 단위)
-    endTime: '16:00',   // 기본값 16:00 (10분 단위)
+    startHour: '09',
+    startMinute: '00',
+    endHour: '16',
+    endMinute: '00',
     daysOfWeek: [],
     institutionName: ''
   });
@@ -62,7 +76,14 @@ export const ScheduleTemplateManager: React.FC<ScheduleTemplateManagerProps> = (
   useEffect(() => {
     if (selectedChildId && onLoadTemplates && isOpen) {
       // 모달이 열린 상태에서만 로드
-      onLoadTemplates(selectedChildId);
+      const loadTemplates = async () => {
+        try {
+          await onLoadTemplates(selectedChildId);
+        } catch (error) {
+          console.error('템플릿 로드 오류:', error);
+        }
+      };
+      loadTemplates();
     }
   }, [selectedChildId, onLoadTemplates, isOpen]);
 
@@ -75,51 +96,87 @@ export const ScheduleTemplateManager: React.FC<ScheduleTemplateManagerProps> = (
 
   const selectedChild = allChildren.find(child => child.id === selectedChildId);
   const selectedChildName = selectedChild ? selectedChild.name : childName;
+  const currentTemplates = allTemplates[selectedChildId] || [];
+
+  // currentTemplates가 변경될 때마다 weeklyRecurringStates 초기화
+  useEffect(() => {
+    if (currentTemplates.length > 0) {
+      const initialStates: {[templateId: string]: boolean} = {};
+      currentTemplates.forEach(template => {
+        initialStates[template.id] = template.isWeeklyRecurring || false;
+      });
+      setWeeklyRecurringStates(initialStates);
+    }
+  }, [currentTemplates]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.startTime || !formData.endTime || formData.daysOfWeek.length === 0) {
+    if (!formData.name || !formData.startHour || !formData.startMinute || !formData.endHour || !formData.endMinute || formData.daysOfWeek.length === 0) {
       alert('모든 필수 항목을 입력해주세요.');
       return;
     }
 
-    // 10분 단위 유효성 검사
-    const isValidTime = (timeString: string) => {
-      const [hours, minutes] = timeString.split(':').map(Number);
-      return minutes % 10 === 0;
-    };
-
-    if (!isValidTime(formData.startTime) || !isValidTime(formData.endTime)) {
-      alert('시간을 10분 단위로 설정해주세요. (예: 09:30, 15:40)');
-      return;
-    }
+    // 시간 문자열 생성
+    const startTime = `${formData.startHour}:${formData.startMinute}`;
+    const endTime = `${formData.endHour}:${formData.endMinute}`;
 
     // 시작 시간이 종료 시간보다 빠른지 확인
-    if (formData.startTime >= formData.endTime) {
+    if (startTime >= endTime) {
       alert('시작 시간이 종료 시간보다 빨라야 합니다.');
       return;
     }
 
-    onSaveTemplate({
+    const templateData = {
       childId: selectedChildId, // 선택된 아이 ID 사용
       name: formData.name,
       activityType: formData.activityType,
-      startTime: formData.startTime,
-      endTime: formData.endTime,
+      startTime: startTime,
+      endTime: endTime,
       daysOfWeek: formData.daysOfWeek,
       institutionName: formData.activityType === 'childcare' ? formData.institutionName : undefined,
       isActive: true
-    });
+    };
 
+    if (editingTemplateId && onUpdateTemplate) {
+      onUpdateTemplate(editingTemplateId, templateData);
+    } else {
+      onSaveTemplate(templateData);
+    }
+
+    resetForm();
+  };
+
+  const resetForm = () => {
     setFormData({
       name: '',
       activityType: 'childcare',
-      startTime: '09:00', // 10분 단위 기본값
-      endTime: '16:00',   // 10분 단위 기본값
+      startHour: '09',
+      startMinute: '00',
+      endHour: '16',
+      endMinute: '00',
       daysOfWeek: [],
       institutionName: ''
     });
+    setEditingTemplateId(null);
     setShowForm(false);
+  };
+
+  const handleEditTemplate = (template: RecurringActivity) => {
+    const [startHour, startMinute] = template.startTime.split(':');
+    const [endHour, endMinute] = template.endTime.split(':');
+    
+    setFormData({
+      name: template.name,
+      activityType: template.activityType,
+      startHour: startHour,
+      startMinute: startMinute,
+      endHour: endHour,
+      endMinute: endMinute,
+      daysOfWeek: template.daysOfWeek,
+      institutionName: template.institutionName || ''
+    });
+    setEditingTemplateId(template.id);
+    setShowForm(true);
   };
 
   const toggleDay = (day: DayOfWeek) => {
@@ -144,7 +201,13 @@ export const ScheduleTemplateManager: React.FC<ScheduleTemplateManagerProps> = (
             <label className="block text-sm font-medium text-gray-700 mb-2">아이 선택</label>
             <select
               value={selectedChildId}
-              onChange={(e) => setSelectedChildId(e.target.value)}
+              onChange={(e) => {
+                const newChildId = e.target.value;
+                setSelectedChildId(newChildId);
+                if (onChildChange) {
+                  onChildChange(newChildId);
+                }
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
             >
               {allChildren.map(child => (
@@ -157,14 +220,13 @@ export const ScheduleTemplateManager: React.FC<ScheduleTemplateManagerProps> = (
         {/* 기존 템플릿 목록 */}
         <div>
           <h3 className="text-lg font-medium text-gray-900 mb-3">{selectedChildName} 저장된 템플릿</h3>
-          {templates.length === 0 ? (
+          {currentTemplates.length === 0 ? (
             <div className="text-center py-4">
               <p className="text-gray-500 text-sm mb-2">저장된 템플릿이 없습니다.</p>
-              <p className="text-xs text-gray-400">인덱스 준비 중이면 몇 분 후 다시 시도해주세요.</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {templates.map(template => (
+              {currentTemplates.map(template => (
                 <div key={template.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{template.name}</p>
@@ -174,23 +236,52 @@ export const ScheduleTemplateManager: React.FC<ScheduleTemplateManagerProps> = (
                       {template.institutionName && ` | ${template.institutionName}`}
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onApplyTemplate(template.id)}
-                      className="px-3 py-1 text-xs bg-primary text-white rounded hover:bg-blue-700"
-                    >
-                      적용
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm('이 템플릿을 삭제하시겠습니까?')) {
-                          onDeleteTemplate(template.id);
-                        }
-                      }}
-                      className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
-                    >
-                      삭제
-                    </button>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`weekly-${template.id}`}
+                        checked={weeklyRecurringStates[template.id] ?? (template.isWeeklyRecurring || false)}
+                        onChange={(e) => setWeeklyRecurringStates(prev => ({
+                          ...prev,
+                          [template.id]: e.target.checked
+                        }))}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                      />
+                      <label htmlFor={`weekly-${template.id}`} className="text-xs text-gray-600">
+                        매주 자동 적용
+                      </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          const isWeeklyRecurring = weeklyRecurringStates[template.id] ?? (template.isWeeklyRecurring || false);
+                          console.log('매주 자동 적용:', isWeeklyRecurring);
+                          onApplyTemplate(template.id, isWeeklyRecurring);
+                        }}
+                        className="px-3 py-1 text-xs bg-primary text-white rounded hover:bg-blue-700"
+                      >
+                        적용
+                      </button>
+                      {onUpdateTemplate && (
+                        <button
+                          onClick={() => handleEditTemplate(template)}
+                          className="px-3 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600"
+                        >
+                          수정
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (window.confirm('이 템플릿을 삭제하시겠습니까?')) {
+                            onDeleteTemplate(template.id);
+                          }
+                        }}
+                        className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -247,43 +338,68 @@ export const ScheduleTemplateManager: React.FC<ScheduleTemplateManagerProps> = (
                 </div>
               </div>
 
-              {formData.activityType === 'childcare' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">기관명</label>
-                  <input
-                    type="text"
-                    value={formData.institutionName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, institutionName: e.target.value }))}
-                    placeholder="예: 고덕베네루체어린이집"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {formData.activityType === 'childcare' ? '기관명' : '장소/기관명'}
+                </label>
+                <input
+                  type="text"
+                  value={formData.institutionName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, institutionName: e.target.value }))}
+                  placeholder={formData.activityType === 'childcare' ? 
+                    "예: 어린이집, 유치원, 학교 이름" : 
+                    "예: 수영장, 태권도장, 학원 이름"
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+                />
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">시작 시간</label>
-                  <input
-                    type="time"
-                    value={formData.startTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
-                    step="600"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">10분 단위로 설정해주세요</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select 
+                      value={formData.startHour} 
+                      onChange={e => setFormData(prev => ({ ...prev, startHour: e.target.value }))}
+                      className="block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                      required
+                    >
+                      <option value="">시</option>
+                      {HOUR_OPTIONS.map(h => <option key={`start-hour-${h}`} value={h}>{h}시</option>)}
+                    </select>
+                    <select 
+                      value={formData.startMinute} 
+                      onChange={e => setFormData(prev => ({ ...prev, startMinute: e.target.value }))}
+                      className="block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                      required
+                    >
+                      <option value="">분</option>
+                      {MINUTE_OPTIONS.map(m => <option key={`start-minute-${m}`} value={m}>{m}분</option>)}
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">종료 시간</label>
-                  <input
-                    type="time"
-                    value={formData.endTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
-                    step="600"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">10분 단위로 설정해주세요</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select 
+                      value={formData.endHour} 
+                      onChange={e => setFormData(prev => ({ ...prev, endHour: e.target.value }))}
+                      className="block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                      required
+                    >
+                      <option value="">시</option>
+                      {HOUR_OPTIONS.map(h => <option key={`end-hour-${h}`} value={h}>{h}시</option>)}
+                    </select>
+                    <select 
+                      value={formData.endMinute} 
+                      onChange={e => setFormData(prev => ({ ...prev, endMinute: e.target.value }))}
+                      className="block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                      required
+                    >
+                      <option value="">분</option>
+                      {MINUTE_OPTIONS.map(m => <option key={`end-minute-${m}`} value={m}>{m}분</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -331,11 +447,11 @@ export const ScheduleTemplateManager: React.FC<ScheduleTemplateManagerProps> = (
                   type="submit"
                   className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-700"
                 >
-                  템플릿 저장
+                  {editingTemplateId ? '템플릿 수정' : '템플릿 저장'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={resetForm}
                   className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
                 >
                   취소

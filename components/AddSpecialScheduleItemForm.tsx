@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SpecialScheduleItem, UserType } from '../types';
+import { SpecialScheduleItem, UserType, Connection } from '../types';
 
 // 시간 드롭다운 생성 (시/분 분리)
 const generateHourOptions = () => {
@@ -12,7 +12,7 @@ const generateHourOptions = () => {
 
 const generateMinuteOptions = () => {
   const minutes = [];
-  for (let minute = 0; minute < 60; minute += 10) {
+  for (let minute = 0; minute < 60; minute += 5) {
     minutes.push(minute.toString().padStart(2, '0'));
   }
   return minutes;
@@ -24,12 +24,13 @@ const MINUTE_OPTIONS = generateMinuteOptions();
 interface AddSpecialScheduleItemFormProps {
   type: 'VACATION' | 'OVERTIME_REQUEST' | 'NOTICE';
   currentUserType: UserType;
+  connections?: Connection[]; // 연결된 돌봄선생님 목록
   itemToEdit?: SpecialScheduleItem; // 수정할 아이템
   onSubmit: (item: Omit<SpecialScheduleItem, 'id'>) => void;
   onClose: () => void;
 }
 
-export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProps> = ({ type, currentUserType, itemToEdit, onSubmit, onClose }) => {
+export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProps> = ({ type, currentUserType, connections, itemToEdit, onSubmit, onClose }) => {
   const [date, setDate] = useState(itemToEdit?.date || new Date().toISOString().split('T')[0]); 
   const [startDate, setStartDate] = useState(itemToEdit?.startDate || new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(itemToEdit?.endDate || new Date().toISOString().split('T')[0]);
@@ -39,7 +40,31 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
   const [startMinute, setStartMinute] = useState(itemToEdit?.startTime?.split(':')[1] || '');
   const [endHour, setEndHour] = useState(itemToEdit?.endTime?.split(':')[0] || '');
   const [endMinute, setEndMinute] = useState(itemToEdit?.endTime?.split(':')[1] || '');
-  const [targetUserType, setTargetUserType] = useState<UserType>(itemToEdit?.targetUserType || currentUserType); // 휴가 대상자
+  // targetUserType 삭제됨 - 휴가는 항상 돌보선생님이 신청
+  const [targetUserId, setTargetUserId] = useState<string>(itemToEdit?.targetUserId || ''); // 연장근무 담당자 ID
+
+  // 권한 기반 UI 제어
+  const canCreateType = (requestType: string) => {
+    switch(requestType) {
+      case 'OVERTIME_REQUEST': 
+        return currentUserType === UserType.PARENT; // 부모만 연장근무 요청 가능
+      case 'VACATION': 
+        return currentUserType === UserType.CARE_PROVIDER; // 돌봄선생님만 휴가 신청 가능
+      case 'NOTICE': 
+        return currentUserType === UserType.PARENT; // 부모만 안내사항 작성 가능
+      default: 
+        return true;
+    }
+  };
+
+  // 연결된 돌봄선생님 목록 가져오기 (연장근무 요청용)
+  const getCareProviders = () => {
+    if (!connections || currentUserType !== UserType.PARENT) return [];
+    return connections.map(conn => ({
+      id: conn.careProviderId,
+      name: conn.careProviderProfile.name || '돌봄선생님'
+    }));
+  };
 
   const getTitlePlaceholder = () => {
     switch(type) {
@@ -61,6 +86,17 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 권한 검증
+    if (!canCreateType(type)) {
+      const typeNames = { 
+        'OVERTIME_REQUEST': '연장근무 요청', 
+        'VACATION': '휴가 신청', 
+        'NOTICE': '안내사항' 
+      };
+      alert(`${typeNames[type as keyof typeof typeNames]}은(는) 권한이 없습니다.`);
+      return;
+    }
     
     // 공통 검증
     if (type !== 'VACATION' && !date) {
@@ -85,9 +121,15 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
     }
     
     // 연장근무 검증
-    if (type === 'OVERTIME_REQUEST' && (!startHour || !startMinute || !endHour || !endMinute)) {
+    if (type === 'OVERTIME_REQUEST') {
+      if (!startHour || !startMinute || !endHour || !endMinute) {
         alert('연장 근무 요청 시 시작 시간과 종료 시간은 필수입니다.');
         return;
+      }
+      if (currentUserType === UserType.PARENT && !targetUserId) {
+        alert('담당 돌봄선생님을 선택해주세요.');
+        return;
+      }
     }
 
     const itemData: Omit<SpecialScheduleItem, 'id'> = {
@@ -99,7 +141,7 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
     };
 
     if (type === 'VACATION') {
-      itemData.targetUserType = targetUserType;
+      itemData.targetUserType = UserType.CARE_PROVIDER; // 휴가는 항상 돌보선생님이 신청
       itemData.startDate = startDate;
       itemData.endDate = endDate;
     }
@@ -107,10 +149,39 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
     if (type === 'OVERTIME_REQUEST') {
       itemData.startTime = `${startHour}:${startMinute}`;
       itemData.endTime = `${endHour}:${endMinute}`;
+      if (targetUserId) {
+        itemData.targetUserId = targetUserId;
+      }
     }
     
     onSubmit(itemData);
   };
+
+  // 권한이 없는 경우 에러 메시지 표시
+  if (!canCreateType(type)) {
+    const typeNames = { 
+      'OVERTIME_REQUEST': '연장근무 요청', 
+      'VACATION': '휴가 신청', 
+      'NOTICE': '안내사항' 
+    };
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+        <p className="text-red-800 text-sm">
+          {typeNames[type as keyof typeof typeNames]}은(는) 권한이 없습니다.
+          {type === 'OVERTIME_REQUEST' && ' 연장근무 요청은 부모만 작성할 수 있습니다.'}
+          {type === 'VACATION' && ' 휴가 신청은 돌봄선생님만 작성할 수 있습니다.'}
+          {type === 'NOTICE' && ' 안내사항은 부모만 작성할 수 있습니다.'}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-3 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          닫기
+        </button>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -169,35 +240,39 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
       </div>
       
       {type === 'VACATION' && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700">휴가 대상자</label>
-          <div className="mt-2 space-x-4">
-            <label className="inline-flex items-center">
-              <input
-                type="radio"
-                value={UserType.PARENT}
-                checked={targetUserType === UserType.PARENT}
-                onChange={(e) => setTargetUserType(e.target.value as UserType)}
-                className="form-radio h-4 w-4 text-primary focus:ring-primary border-gray-300"
-              />
-              <span className="ml-2 text-sm text-gray-700">부모</span>
-            </label>
-            <label className="inline-flex items-center">
-              <input
-                type="radio"
-                value={UserType.CARE_PROVIDER}
-                checked={targetUserType === UserType.CARE_PROVIDER}
-                onChange={(e) => setTargetUserType(e.target.value as UserType)}
-                className="form-radio h-4 w-4 text-primary focus:ring-primary border-gray-300"
-              />
-              <span className="ml-2 text-sm text-gray-700">돌봄 선생님</span>
-            </label>
-          </div>
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <p className="text-sm text-blue-800">
+            휴가 신청은 돌봄선생님에게 적용됩니다.
+          </p>
         </div>
       )}
       
       {type === 'OVERTIME_REQUEST' && (
         <div className="space-y-4">
+          {/* 담당 선생님 선택 (부모 사용자만) */}
+          {currentUserType === UserType.PARENT && getCareProviders().length > 0 && (
+            <div>
+              <label htmlFor="targetUserId" className="block text-sm font-medium text-gray-700">담당 돌봄선생님</label>
+              <select
+                id="targetUserId"
+                value={targetUserId}
+                onChange={(e) => setTargetUserId(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                required
+              >
+                <option value="">담당 선생님을 선택하세요</option>
+                {getCareProviders().map(provider => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                연장근무를 담당할 돌봄선생님을 선택해주세요.
+              </p>
+            </div>
+          )}
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">시작 시간</label>
             <div className="grid grid-cols-2 gap-2">

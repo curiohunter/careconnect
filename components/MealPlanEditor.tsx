@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { DateRangeMealPlan, DailyMealPlanNew, UserType } from '../types';
 import { DAYS_OF_WEEK } from '../constants';
+// 요일과 날짜 표시 함수
+const formatDayWithDate = (dayName: string, date: Date): string => {
+  const month = date.getMonth() + 1;
+  const dayOfMonth = date.getDate();
+  return `${dayName} ${month}/${dayOfMonth}`;
+};
 
-// 이번주 날짜 계산 함수
-const getWeekDates = () => {
+// 로컬 주간 날짜 계산 함수
+const getWeekDates = (): Date[] => {
   const today = new Date();
   const currentDay = today.getDay(); // 0: 일, 1: 월, ...
   const monday = new Date(today);
@@ -19,17 +25,14 @@ const getWeekDates = () => {
   return weekDates;
 };
 
-// 날짜 포맷팅 함수 (YYYY-MM-DD)
+// 날짜 포맷팅 함수 (YYYY-MM-DD) - 로컬 시간 기준
 const formatDateLocal = (date: Date): string => {
-  return date.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
-// 요일과 날짜를 함께 표시하는 함수
-const formatDayWithDate = (dayName: string, date: Date) => {
-  const month = date.getMonth() + 1;
-  const dayOfMonth = date.getDate();
-  return `${dayName} ${month}/${dayOfMonth}`;
-};
 
 interface MealPlanEditorProps {
   currentWeekMealPlans: DateRangeMealPlan;
@@ -83,22 +86,32 @@ export const MealPlanEditor: React.FC<MealPlanEditorProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-900">주간 식사 계획 (날짜별)</h3>
+        <h3 className="text-lg font-semibold text-gray-900">주간 식사 계획 </h3>
         <div className="flex items-center space-x-4">
           {!isCareProvider && onEditModeChange && (
-            <button
-              onClick={() => onEditModeChange(!isEditing)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                isEditing 
-                  ? 'bg-green-600 text-white hover:bg-green-700' 
-                  : 'bg-primary text-white hover:bg-blue-700'
-              }`}
-            >
-              {isEditing ? '편집 완료' : '식사 계획 편집'}
-            </button>
-          )}
-          {isCareProvider && (
-            <span className="text-sm text-gray-500">돌봄 제공자는 식사 계획을 조회만 가능합니다</span>
+            <div className="flex gap-3">
+              {isEditing && (
+                <button
+                  onClick={() => onEditModeChange(false)}
+                  className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  뒤로
+                </button>
+              )}
+              <button
+                onClick={() => onEditModeChange(!isEditing)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  isEditing 
+                    ? 'bg-accent text-white hover:bg-amber-600' 
+                    : 'bg-primary text-white hover:bg-blue-700'
+                }`}
+              >
+                {isEditing ? '저장' : '식사 편집'}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -169,13 +182,6 @@ export const MealPlanEditor: React.FC<MealPlanEditorProps> = ({
         </table>
       </div>
       
-      {isEditing && !isCareProvider && (
-        <div className="mt-4">
-          <p className="text-xs text-gray-500">
-            💡 팁: 메뉴나 특이사항을 입력한 후 다른 칸을 클릭하면 자동으로 저장됩니다.
-          </p>
-        </div>
-      )}
     </div>
   );
 };

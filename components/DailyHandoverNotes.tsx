@@ -3,12 +3,48 @@ import { useAuth } from '../hooks/useAuth';
 import { useData } from '../hooks/useData';
 import { 
   DailyHandoverNote, 
-  DayOfWeek 
+  DayOfWeek,
+  UserType
 } from '../types';
 import { DAYS_OF_WEEK } from '../constants';
 import { PlusIcon } from './icons/PlusIcon';
 import { PencilIcon } from './icons/PencilIcon';
 import { TrashIcon } from './icons/TrashIcon';
+import { CalendarIcon } from './icons/CalendarIcon';
+import { safeFormatDate } from '../utils';
+
+// 로컬 주간 날짜 계산 함수
+const getWeekDates = (): Date[] => {
+  const today = new Date();
+  const currentDay = today.getDay(); // 0: 일, 1: 월, ...
+  const monday = new Date(today);
+  const daysToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+  monday.setDate(today.getDate() + daysToMonday);
+  
+  const weekDates = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    weekDates.push(date);
+  }
+  return weekDates;
+};
+
+// 날짜 포맷팅 함수 (YYYY-MM-DD) - 로컬 시간 기준
+const formatDateLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// 요일과 날짜 표시 함수
+const formatDayWithDate = (dayName: string, date: Date): string => {
+  const month = date.getMonth() + 1;
+  const dayOfMonth = date.getDate();
+  return `${dayName} ${month}/${dayOfMonth}`;
+};
+
 import toast from 'react-hot-toast';
 
 interface DailyHandoverNotesProps {
@@ -26,34 +62,39 @@ export const DailyHandoverNotes: React.FC<DailyHandoverNotesProps> = ({ connecti
 
   // 안전한 기본값 설정
   const safeNotes = Array.isArray(dailyHandoverNotes) ? dailyHandoverNotes : [];
+  
 
-  const [selectedDay, setSelectedDay] = useState<DayOfWeek | ''>('');
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [newNote, setNewNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState('');
   const [filteredNotes, setFilteredNotes] = useState<DailyHandoverNote[]>([]);
 
-  // 오늘 날짜 정보
-  const today = new Date();
-  const todayString = today.toISOString().split('T')[0]; // YYYY-MM-DD
-  const todayDayOfWeek = DAYS_OF_WEEK[today.getDay()]; // 일요일=0, 월요일=1, ...
+  // 로컬 시간 기준 오늘 날짜 정보
+  const weekDates = getWeekDates();
+  const now = new Date();
+  const todayString = formatDateLocal(now); // YYYY-MM-DD
+  
+  // 오늘이 이번주 몇 번째 날인지 찾기
+  const todayIndex = weekDates.findIndex(date => formatDateLocal(date) === todayString);
+  const todayDayOfWeek = todayIndex >= 0 ? DAYS_OF_WEEK[todayIndex] : '화'; // 기본값으로 화요일
 
-  // 메모 필터링
+  // 메모 필터링 (모든 날짜 검색 가능)
   useEffect(() => {
-    if (selectedDay === '') {
+    if (selectedDate === '') {
       // 당일 작성분만 표시
       const todayNotes = safeNotes.filter(note => 
         note.date === todayString
       );
       setFilteredNotes(todayNotes);
     } else {
-      // 선택한 요일별 검색
-      const dayNotes = safeNotes.filter(note => 
-        note.dayOfWeek === selectedDay
+      // 선택한 날짜의 메모 검색 (과거 포함)
+      const dateNotes = safeNotes.filter(note => 
+        note.date === selectedDate
       );
-      setFilteredNotes(dayNotes);
+      setFilteredNotes(dateNotes);
     }
-  }, [safeNotes, selectedDay, todayString]);
+  }, [safeNotes, selectedDate, todayString]);
 
   // 새 메모 추가
   const handleAddNote = async () => {
@@ -134,20 +175,24 @@ export const DailyHandoverNotes: React.FC<DailyHandoverNotesProps> = ({ connecti
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-900">인수인계 메모</h2>
         
-        {/* 요일별 검색 필터 */}
+        {/* 날짜별 검색 필터 */}
         <div className="flex items-center space-x-2">
-          <select
-            value={selectedDay}
-            onChange={(e) => setSelectedDay(e.target.value as DayOfWeek | '')}
+          <span className="text-sm text-gray-600">검색</span>
+          <CalendarIcon className="w-5 h-5 text-gray-500" />
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-          >
-            <option value="">오늘 작성분</option>
-            {DAYS_OF_WEEK.map((day) => (
-              <option key={day} value={day}>
-                {day}요일별 검색
-              </option>
-            ))}
-          </select>
+          />
+          {selectedDate && (
+            <button
+              onClick={() => setSelectedDate('')}
+              className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              오늘로 돌아가기
+            </button>
+          )}
         </div>
       </div>
 
@@ -172,9 +217,6 @@ export const DailyHandoverNotes: React.FC<DailyHandoverNotesProps> = ({ connecti
             추가
           </button>
         </div>
-        <div className="mt-2 text-xs text-gray-600">
-          💡 {selectedDay === '' ? `오늘(${todayDayOfWeek}요일)` : `${selectedDay}요일`} 메모가 표시됩니다.
-        </div>
       </div>
 
       {/* 메모 목록 */}
@@ -182,15 +224,17 @@ export const DailyHandoverNotes: React.FC<DailyHandoverNotesProps> = ({ connecti
         {filteredNotes.length === 0 ? (
           <div className="py-8 text-center text-gray-500">
             <p>
-              {selectedDay === '' 
+              {selectedDate === '' 
                 ? '오늘 작성된 인수인계 메모가 없습니다.' 
-                : `${selectedDay}요일에 작성된 메모가 없습니다.`
+                : `${safeFormatDate(selectedDate, '선택된 날짜')}에 작성된 메모가 없습니다.`
               }
             </p>
           </div>
         ) : (
           filteredNotes.map(note => {
             const isMyNote = note.authorId === user?.uid;
+            const isParent = userProfile?.userType === UserType.PARENT;
+            const canEditDelete = isMyNote || isParent;
             const isEditing = editingNoteId === note.id;
             
             return (
@@ -212,7 +256,7 @@ export const DailyHandoverNotes: React.FC<DailyHandoverNotesProps> = ({ connecti
                         {note.authorName}
                       </span>
                       <span className="text-xs text-gray-400">
-                        {new Date(note.createdAt).toLocaleDateString()}
+                        {safeFormatDate(note.createdAt, '날짜 미상')}
                       </span>
                     </div>
                     
@@ -244,8 +288,8 @@ export const DailyHandoverNotes: React.FC<DailyHandoverNotesProps> = ({ connecti
                     )}
                   </div>
                   
-                  {/* 작성자만 수정/삭제 가능 */}
-                  {isMyNote && !isEditing && (
+                  {/* 작성자와 부모 수정/삭제 가능 */}
+                  {canEditDelete && !isEditing && (
                     <div className="flex space-x-1 ml-3">
                       <button
                         onClick={() => startEditing(note)}
@@ -268,10 +312,6 @@ export const DailyHandoverNotes: React.FC<DailyHandoverNotesProps> = ({ connecti
             );
           })
         )}
-      </div>
-      
-      <div className="text-xs text-gray-500 mt-4">
-        💡 본인이 작성한 메모만 수정하고 삭제할 수 있습니다. 모든 인수인계 메모는 연결된 모든 사용자가 조회할 수 있습니다.
       </div>
     </div>
   );

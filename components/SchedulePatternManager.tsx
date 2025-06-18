@@ -25,10 +25,10 @@ const generateHourOptions = () => {
   return hours;
 };
 
-// 분 옵션 생성 (10분 단위)
+// 분 옵션 생성 (5분 단위)
 const generateMinuteOptions = () => {
   const minutes = [];
-  for (let i = 0; i < 60; i += 10) {
+  for (let i = 0; i < 60; i += 5) {
     minutes.push(i.toString().padStart(2, '0'));
   }
   return minutes;

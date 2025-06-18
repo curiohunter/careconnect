@@ -34,6 +34,7 @@ export interface RecurringActivity {
   daysOfWeek: DayOfWeek[]; // 반복될 요일들
   institutionName?: string; // 기관 활동일 때만
   isActive: boolean; // 활성/비활성
+  isWeeklyRecurring?: boolean; // 매주 자동 적용 여부
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -66,7 +67,8 @@ export interface UserProfile {
   name: string;
   contact: string;
   email?: string;
-  connectionId?: string; // 연결된 상대방의 사용자 ID
+  connectionId?: string; // 연결된 상대방의 사용자 ID (단일 연결 - 하위 호환성)
+  connectionIds?: string[]; // 다중 연결 ID 목록 (새로운 필드)
   inviteCode?: string; // 자신의 초대 코드
   fcmToken?: string; // FCM 토큰
   workSchedule?: WorkSchedule; // 기본 근무 일정
@@ -209,6 +211,7 @@ export interface SpecialScheduleItem {
   endTime?: string;
   status?: RequestStatus; // 요청 상태 (기본값: PENDING)
   targetUserType?: UserType; // 휴가 대상자 (PARENT | CAREGIVER)
+  targetUserId?: string; // 연장근무 요청 시 담당 돌봄선생님 ID 지정
   readBy?: Record<string, Date>; // { userId: readTimestamp } 형태로 읽음 확인
   creatorUserType?: UserType;
   createdBy?: string; // 작성자 ID

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useData } from '../hooks/useData';
 import { UserType } from '../types';
@@ -8,19 +8,17 @@ import { BottomSection } from './BottomSection';
 import { Modal } from './Modal';
 import { AddMedicationForm } from './AddMedicationForm';
 import { AddSpecialScheduleItemForm } from './AddSpecialScheduleItemForm';
-import WorkScheduleSettings from './WorkScheduleSettings';
 import InviteCodeManager from './InviteCodeManager';
 import ChildrenManager from './ChildrenManager';
+import AccountManager from './AccountManager';
 import { ScheduleTemplateManager } from './ScheduleTemplateManager';
 import { DailyHandoverNotes } from './DailyHandoverNotes';
-import { ProviderSwitcher } from './ProviderSwitcher';
-import { SchedulePatternManager } from './SchedulePatternManager';
 import { LogoutIcon } from './icons/LogoutIcon';
-import { UserCircleIcon } from './icons/UserCircleIcon';
 import { SettingsIcon } from './icons/SettingsIcon';
+import ConnectionSelector from './ConnectionSelector';
 
 export const Dashboard: React.FC = () => {
-  const { user, userProfile, connection, signOut } = useAuth();
+  const { user, userProfile, connection, connections, signOut } = useAuth();
   const {
     children,
     mealPlan,
@@ -37,7 +35,6 @@ export const Dashboard: React.FC = () => {
     addSpecialScheduleItem,
     updateSpecialScheduleItem,
     deleteSpecialScheduleItem,
-    markNoticeAsRead,
     currentWeekSchedules,
     loadCurrentWeekSchedules,
     updateDailySchedule,
@@ -48,21 +45,23 @@ export const Dashboard: React.FC = () => {
     recurringTemplates,
     loadRecurringTemplates,
     saveRecurringTemplate,
+    updateRecurringTemplate,
     deleteRecurringTemplate,
     applyRecurringTemplate
   } = useData();
 
   const [activeModal, setActiveModal] = useState<ActiveModal | null>(null);
-  const [showWorkScheduleSettings, setShowWorkScheduleSettings] = useState(false);
   const [showInviteCodeManager, setShowInviteCodeManager] = useState(false);
   const [showChildrenManager, setShowChildrenManager] = useState(false);
+  const [showAccountManager, setShowAccountManager] = useState(false);
   const [showTemplateManager, setShowTemplateManager] = useState(false);
-  const [showSchedulePatternManager, setShowSchedulePatternManager] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [editingMealPlan, setEditingMealPlan] = useState(false);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [editingMedication, setEditingMedication] = useState<any>(null);
   const [editingSpecialItem, setEditingSpecialItem] = useState<any>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // 활성 아이 설정
   useEffect(() => {
@@ -72,6 +71,18 @@ export const Dashboard: React.FC = () => {
       setActiveChildId(null);
     }
   }, [children, activeChildId]);
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   
   // 활성 아이가 변경될 때마다 템플릿 로드 (인댑스 오류 방지를 위해 비활성화)
   // useEffect(() => {
@@ -112,26 +123,63 @@ export const Dashboard: React.FC = () => {
   if (!connection) {
     return (
       <div className="min-h-screen bg-gray-100">
-        <header className="bg-primary text-white p-4 shadow-md">
-          <div className="container mx-auto flex justify-between items-center">
-            <h1 className="text-2xl font-bold">CareConnect</h1>
-            <div className="flex items-center space-x-3">
-              <UserCircleIcon className="w-8 h-8"/>
-              <span>{userProfile?.name} ({userProfile?.userType === UserType.PARENT ? '부모' : '돌봄 선생님'})</span>
-              <button
-                onClick={() => setShowInviteCodeManager(true)}
-                className="p-2 rounded-full hover:bg-blue-700 transition-colors"
-                aria-label="초대 코드 관리"
-              >
-                <SettingsIcon className="w-6 h-6" />
-              </button>
-              <button
-                onClick={signOut}
-                className="p-2 rounded-full hover:bg-blue-700 transition-colors"
-                aria-label="로그아웃"
-              >
-                <LogoutIcon className="w-6 h-6" />
-              </button>
+        <header className="bg-primary text-white shadow-md">
+          <div className="container mx-auto px-4 py-3">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl sm:text-2xl font-bold">CareConnect</h1>
+              </div>
+              
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                {/* 다중 연결 선택 - 모든 사용자 */}
+                <ConnectionSelector />
+                
+                {/* 사용자 정보 - 데스크톱에서만 표시 */}
+                <div className="hidden sm:flex items-center space-x-2">
+                  <span className="text-sm">{userProfile?.name}</span>
+                  <span className="text-xs opacity-75">
+                    ({userProfile?.userType === UserType.PARENT ? '부모' : '돌봄선생님'})
+                  </span>
+                </div>
+                
+                <div className="relative" ref={dropdownRef}>
+                  <button 
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="p-1.5 sm:p-2 rounded-full hover:bg-blue-700 transition-colors"
+                  >
+                    <SettingsIcon className="w-4 h-4 sm:w-6 sm:h-6" />
+                  </button>
+                  {isDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                      <button
+                        onClick={() => {
+                          setShowAccountManager(true);
+                          setIsDropdownOpen(false);
+                        }}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                      >
+                        계정 관리
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowInviteCodeManager(true);
+                          setIsDropdownOpen(false);
+                        }}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                      >
+                        초대 코드 관리
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={signOut}
+                  className="p-1.5 sm:p-2 rounded-full hover:bg-blue-700 transition-colors"
+                  aria-label="로그아웃"
+                >
+                  <LogoutIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -215,58 +263,70 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="bg-primary text-white p-4 shadow-md sticky top-0 z-50">
-        <div className="container mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold">CareConnect</h1>
-          <div className="flex items-center space-x-3">
-            <UserCircleIcon className="w-8 h-8"/>
-            <span>{userProfile?.name} ({userProfile?.userType === UserType.PARENT ? '부모' : '돌봄 선생님'})</span>
-            
-            <div className="relative group">
-              <button className="p-2 rounded-full hover:bg-blue-700 transition-colors">
-                <SettingsIcon className="w-6 h-6" />
-              </button>
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                <button
-                  onClick={() => setShowInviteCodeManager(true)}
-                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                >
-                  초대 코드 관리
-                </button>
-                {userProfile?.userType === UserType.PARENT && (
-                  <button
-                    onClick={() => setShowChildrenManager(true)}
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                  >
-                    아이 정보 관리
-                  </button>
-                )}
-                {userProfile?.userType === UserType.CARE_PROVIDER && (
-                  <>
-                    <button
-                      onClick={() => setShowWorkScheduleSettings(true)}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                    >
-                      근무 일정 설정
-                    </button>
-                    <button
-                      onClick={() => setShowSchedulePatternManager(true)}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                    >
-                      근무 패턴 관리
-                    </button>
-                  </>
-                )}
-              </div>
+      <header className="bg-primary text-white shadow-md sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-3">
+          {/* 모바일 최적화된 헤더 */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-2">
+              <h1 className="text-xl sm:text-2xl font-bold">CareConnect</h1>
             </div>
             
-            <button
-              onClick={signOut}
-              className="p-2 rounded-full hover:bg-blue-700 transition-colors"
-              aria-label="로그아웃"
-            >
-              <LogoutIcon className="w-6 h-6" />
-            </button>
+            <div className="flex items-center space-x-2">
+              {/* 다중 연결 선택 - 돌봄선생님만 */}
+              {userProfile?.userType === UserType.CARE_PROVIDER && (
+                <ConnectionSelector />
+              )}
+              
+              <div className="relative" ref={dropdownRef}>
+                <button 
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="p-1.5 sm:p-2 rounded-full hover:bg-blue-700 transition-colors"
+                >
+                  <SettingsIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+                </button>
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                    <button
+                      onClick={() => {
+                        setShowAccountManager(true);
+                        setIsDropdownOpen(false);
+                      }}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                    >
+                      계정 관리
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowInviteCodeManager(true);
+                        setIsDropdownOpen(false);
+                      }}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                    >
+                      초대 코드 관리
+                    </button>
+                    {userProfile?.userType === UserType.PARENT && (
+                      <button
+                        onClick={() => {
+                          setShowChildrenManager(true);
+                          setIsDropdownOpen(false);
+                        }}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                      >
+                        아이 정보 관리
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              <button
+                onClick={signOut}
+                className="p-1.5 sm:p-2 rounded-full hover:bg-blue-700 transition-colors"
+                aria-label="로그아웃"
+              >
+                <LogoutIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -276,28 +336,35 @@ export const Dashboard: React.FC = () => {
            <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-primary">{mainChildName} 주간 일정표</h2>
             {userProfile?.userType === UserType.PARENT && (
-              <div className="flex gap-2">
-                <button 
-                    onClick={() => {
-                      if (activeChildId) {
-                        setShowTemplateManager(true);
-                      }
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
-                >
-                    반복 일정
-                </button>
+              <div className="flex gap-3">
+                {editingSchedule && (
+                  <button
+                    onClick={() => setEditingSchedule(false)}
+                    className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    뒤로
+                  </button>
+                )}
+                {editingSchedule && (
+                  <button 
+                      onClick={() => {
+                        if (activeChildId) {
+                          setShowTemplateManager(true);
+                        }
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                  >
+                      반복 일정
+                  </button>
+                )}
                 <button 
                     onClick={() => setEditingSchedule(!editingSchedule)}
                     className="px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-amber-600 rounded-md transition-colors"
                 >
                     {editingSchedule ? '저장' : '일정 편집'}
-                </button>
-                <button 
-                    onClick={() => setEditingMealPlan(!editingMealPlan)}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
-                >
-                    {editingMealPlan ? '저장' : '식사 편집'}
                 </button>
               </div>
             )}
@@ -339,37 +406,6 @@ export const Dashboard: React.FC = () => {
           />
         </div>
 
-        {/* 돌봄 선생님 선택 섹션 */}
-        {userProfile?.userType === UserType.PARENT && (
-          <div className="bg-white p-6 rounded-lg shadow-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-primary">담당 선생님</h2>
-            </div>
-            
-            <ProviderSwitcher
-              providers={[
-                {
-                  id: 'provider1',
-                  name: '김선생님',
-                  isActive: true,
-                  permissions: [],
-                  assignmentType: 'PRIMARY',
-                  workStatus: 'WORKING',
-                },
-                {
-                  id: 'provider2',
-                  name: '이선생님',
-                  isActive: true,
-                  permissions: [],
-                  assignmentType: 'SECONDARY',
-                  workStatus: 'AVAILABLE',
-                }
-              ]}
-              activeProviderId={'all'}
-              onProviderChange={(id) => console.log('선택된 선생님:', id)}
-            />
-          </div>
-        )}
 
         {/* 인수인계 시스템 섹션 */}
         <div className="bg-white p-6 rounded-lg shadow-lg">
@@ -378,7 +414,14 @@ export const Dashboard: React.FC = () => {
       </main>
 
       <footer className="bg-darkgray text-white text-center p-4">
-        &copy; {new Date().getFullYear()} CareConnect. 모든 권리 보유.
+        <p>&copy; {new Date().getFullYear()} CareConnect by Ian Park</p>
+        <p className="text-sm mt-1">
+          피드백이나 문의사항이 있으신가요?
+          <a href="mailto:ian_park@valueinmath.com?subject=CareConnect 피드백" 
+             className="underline hover:text-primary ml-1">
+            이메일 보내기
+          </a>
+        </p>
       </footer>
 
       {activeModal === 'add_medication' && (
@@ -407,6 +450,7 @@ export const Dashboard: React.FC = () => {
           <AddSpecialScheduleItemForm 
             type="OVERTIME_REQUEST" 
             currentUserType={userProfile?.userType || UserType.PARENT}
+            connections={connections}
             onSubmit={handleAddOrUpdateSpecialItem} 
             onClose={closeModal}
           />
@@ -418,6 +462,7 @@ export const Dashboard: React.FC = () => {
           <AddSpecialScheduleItemForm 
             type="OVERTIME_REQUEST" 
             currentUserType={userProfile?.userType || UserType.PARENT}
+            connections={connections}
             itemToEdit={editingSpecialItem}
             onSubmit={handleAddOrUpdateSpecialItem} 
             onClose={closeModal}
@@ -430,6 +475,7 @@ export const Dashboard: React.FC = () => {
           <AddSpecialScheduleItemForm 
             type="VACATION" 
             currentUserType={userProfile?.userType || UserType.PARENT}
+            connections={connections}
             onSubmit={handleAddOrUpdateSpecialItem} 
             onClose={closeModal}
           />
@@ -441,6 +487,7 @@ export const Dashboard: React.FC = () => {
           <AddSpecialScheduleItemForm 
             type="VACATION" 
             currentUserType={userProfile?.userType || UserType.PARENT}
+            connections={connections}
             itemToEdit={editingSpecialItem}
             onSubmit={handleAddOrUpdateSpecialItem} 
             onClose={closeModal}
@@ -453,6 +500,7 @@ export const Dashboard: React.FC = () => {
           <AddSpecialScheduleItemForm 
             type="NOTICE" 
             currentUserType={userProfile?.userType || UserType.PARENT}
+            connections={connections}
             onSubmit={handleAddOrUpdateSpecialItem} 
             onClose={closeModal}
           />
@@ -464,6 +512,7 @@ export const Dashboard: React.FC = () => {
           <AddSpecialScheduleItemForm 
             type="NOTICE" 
             currentUserType={userProfile?.userType || UserType.PARENT}
+            connections={connections}
             itemToEdit={editingSpecialItem}
             onSubmit={handleAddOrUpdateSpecialItem} 
             onClose={closeModal}
@@ -471,10 +520,6 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      <WorkScheduleSettings 
-        isOpen={showWorkScheduleSettings}
-        onClose={() => setShowWorkScheduleSettings(false)}
-      />
       
       <InviteCodeManager 
         isOpen={showInviteCodeManager}
@@ -485,11 +530,12 @@ export const Dashboard: React.FC = () => {
         isOpen={showChildrenManager}
         onClose={() => setShowChildrenManager(false)}
       />
-      
-      <SchedulePatternManager
-        isOpen={showSchedulePatternManager}
-        onClose={() => setShowSchedulePatternManager(false)}
+
+      <AccountManager 
+        isOpen={showAccountManager}
+        onClose={() => setShowAccountManager(false)}
       />
+      
       
       {activeChildId && userProfile?.userType === UserType.PARENT && (
         <ScheduleTemplateManager
@@ -498,11 +544,13 @@ export const Dashboard: React.FC = () => {
           childId={activeChildId}
           childName={children.find(c => c.id === activeChildId)?.name || '아이'}
           allChildren={children.map(child => ({ id: child.id, name: child.name }))}
-          templates={recurringTemplates[activeChildId] || []}
+          allTemplates={recurringTemplates}
           onSaveTemplate={saveRecurringTemplate}
+          onUpdateTemplate={(templateId, template) => updateRecurringTemplate(templateId, template)}
           onDeleteTemplate={(templateId) => deleteRecurringTemplate(templateId, activeChildId)}
-          onApplyTemplate={(templateId) => applyRecurringTemplate(templateId, activeChildId)}
+          onApplyTemplate={(templateId, isWeeklyRecurring) => applyRecurringTemplate(templateId, activeChildId, isWeeklyRecurring)}
           onLoadTemplates={loadRecurringTemplates}
+          onChildChange={setActiveChildId}
         />
       )}
     </div>

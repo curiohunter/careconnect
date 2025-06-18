@@ -129,7 +129,7 @@ export const generateHourOptions = (): string[] => {
   return hours;
 };
 
-export const generateMinuteOptions = (intervalMinutes: number = 10): string[] => {
+export const generateMinuteOptions = (intervalMinutes: number = 5): string[] => {
   const minutes: string[] = [];
   for (let m = 0; m < 60; m += intervalMinutes) {
     minutes.push(String(m).padStart(2, '0'));

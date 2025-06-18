@@ -11,32 +11,26 @@ import {
   addDoc,
   serverTimestamp,
   onSnapshot,
-  writeBatch,
   orderBy,
   Unsubscribe
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
-  ChildInfo, 
-  DailyMealPlan, 
   Medication, 
   SpecialScheduleItem, 
   WorkSchedule,
   DayOfWeek,
   Activity,
-  DailyActivities,
   RecurringActivity,
   // 새로운 날짜별 타입들
   DailySchedule,
   DateRangeSchedules,
-  ChildDateSchedules,
   DateRange,
   WeekRange,
   DailyMealPlanNew,
   DateRangeMealPlan,
   // 다대다 관계 타입 시스템
   MultiConnection,
-  Permission,
   CareProviderAssignment,
   SchedulePattern,
   DailyHandoverNote
@@ -44,94 +38,54 @@ import {
 
 // 데이터 서비스
 export class DataService {
-  // 아이 정보 관련
+  // ===== BACKWARD COMPATIBILITY WRAPPERS =====
+  // These functions provide backward compatibility for components still using connectionId
+  
+  // Children management wrappers
   static async saveChildren(connectionId: string, children: ChildInfo[]) {
-    try {
-      const batch = writeBatch(db);
-      
-      // 기존 아이 정보 삭제
-      const existingQuery = query(
-        collection(db, 'children'),
-        where('connectionId', '==', connectionId)
-      );
-      const existingDocs = await getDocs(existingQuery);
-      existingDocs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      
-      // 새 아이 정보 저장
-      children.forEach(child => {
-        const childRef = doc(collection(db, 'children'));
-        batch.set(childRef, {
-          ...child,
-          connectionId,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-      });
-      
-      await batch.commit();
-    } catch (error) {
-      console.error('아이 정보 저장 오류:', error);
-      throw error;
-    }
+    console.warn('saveChildren with connectionId is deprecated. Use parentId-based functions.');
+    throw new Error('saveChildren with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   static async getChildren(connectionId: string): Promise<ChildInfo[]> {
-    try {
-      const q = query(
-        collection(db, 'children'),
-        where('connectionId', '==', connectionId)
-      );
-      const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as ChildInfo[];
-    } catch (error) {
-      console.error('아이 정보 가져오기 오류:', error);
-      throw error;
-    }
+    console.warn('getChildren with connectionId is deprecated. Use parentId-based functions.');
+    throw new Error('getChildren with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
-  // 식사 계획 관련
-  static async saveMealPlan(connectionId: string, mealPlan: DailyMealPlan) {
-    try {
-      const docRef = doc(db, 'mealPlans', connectionId);
-      await setDoc(docRef, {
-        mealPlan,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-    } catch (error) {
-      console.error('식사 계획 저장 오류:', error);
-      throw error;
-    }
-  }
-
+  // Meal plan wrappers
   static async getMealPlan(connectionId: string): Promise<DailyMealPlan | null> {
-    try {
-      const docSnap = await getDoc(doc(db, 'mealPlans', connectionId));
-      if (docSnap.exists()) {
-        return docSnap.data().mealPlan || null;
-      }
-      return null;
-    } catch (error) {
-      console.error('식사 계획 가져오기 오류:', error);
-      throw error;
-    }
+    console.warn('getMealPlan with connectionId is deprecated. Use parentId-based functions.');
+    throw new Error('getMealPlan with connectionId is deprecated. Please update to use parentId-based functions.');
+  }
+
+  static async saveMealPlan(connectionId: string, mealPlan: DailyMealPlan) {
+    console.warn('saveMealPlan with connectionId is deprecated. Use parentId-based functions.');
+    throw new Error('saveMealPlan with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   static onMealPlanChange(connectionId: string, callback: (mealPlan: DailyMealPlan | null) => void): Unsubscribe {
-    return onSnapshot(doc(db, 'mealPlans', connectionId), (doc) => {
-      if (doc.exists()) {
-        callback(doc.data().mealPlan || null);
-      } else {
-        callback(null);
-      }
-    });
+    console.warn('onMealPlanChange with connectionId is deprecated. Use parentId-based functions.');
+    throw new Error('onMealPlanChange with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
+  // Medication wrappers
+  static async addMedication(connectionId: string, medication: Omit<Medication, 'id'>) {
+    console.warn('addMedication with connectionId is deprecated. Use parentId-based functions.');
+    throw new Error('addMedication with connectionId is deprecated. Please update to use parentId-based functions.');
+  }
+
+  static async getMedications(connectionId: string): Promise<Medication[]> {
+    console.warn('getMedications with connectionId is deprecated. Use parentId-based functions.');
+    throw new Error('getMedications with connectionId is deprecated. Please update to use parentId-based functions.');
+  }
+
+  static onMedicationsChange(connectionId: string, callback: (medications: Medication[]) => void): Unsubscribe {
+    console.warn('onMedicationsChange with connectionId is deprecated. Use parentId-based functions.');
+    throw new Error('onMedicationsChange with connectionId is deprecated. Please update to use parentId-based functions.');
+  }
+
+  // ===== CORE FUNCTIONALITY =====
+  
   // 투약 정보 관련
   /**
    * Firestore 저장용 Medication 정제 함수 (undefined 제거 및 빈 문자열 보장)
@@ -147,20 +101,19 @@ export class DataService {
     return cleaned;
   }
 
-  static async addMedication(connectionId: string, medication: Omit<Medication, 'id'>) {
-    try {
-      const medicationRef = await addDoc(collection(db, 'medications'), {
-        ...DataService.cleanMedication({ ...medication }),
-        connectionId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      return medicationRef.id;
-    } catch (error) {
-      console.error('투약 정보 추가 오류:', error);
-      throw error;
-    }
+  /**
+   * Firestore 저장용 SpecialScheduleItem 정제 함수 (undefined 제거)
+   */
+  private static cleanSpecialScheduleItem(item: Partial<SpecialScheduleItem>): any {
+    const cleaned: any = {};
+    Object.entries(item).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        cleaned[key] = value;
+      }
+    });
+    return cleaned;
   }
+
 
   static async updateMedication(medicationId: string, updates: Partial<Medication>) {
     try {
@@ -183,56 +136,12 @@ export class DataService {
     }
   }
 
-  static async getMedications(connectionId: string): Promise<Medication[]> {
-    try {
-      const q = query(
-        collection(db, 'medications'),
-        where('connectionId', '==', connectionId),
-        orderBy('createdAt', 'desc')
-      );
-      const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Medication[];
-    } catch (error) {
-      console.error('투약 정보 가져오기 오류:', error);
-      throw error;
-    }
-  }
 
-  static onMedicationsChange(connectionId: string, callback: (medications: Medication[]) => void): Unsubscribe {
-    const q = query(
-      collection(db, 'medications'),
-      where('connectionId', '==', connectionId),
-      orderBy('createdAt', 'desc')
-    );
-    
-    return onSnapshot(q, (querySnapshot) => {
-      const medications = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Medication[];
-      callback(medications);
-    });
-  }
 
   // 특별 일정 관련
-  static async addSpecialScheduleItem(connectionId: string, item: Omit<SpecialScheduleItem, 'id'>) {
-    try {
-      const itemRef = await addDoc(collection(db, 'specialSchedules'), {
-        ...item,
-        connectionId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      return itemRef.id;
-    } catch (error) {
-      console.error('특별 일정 추가 오류:', error);
-      throw error;
-    }
-  }
+
+  // ===== 권한 기반 특별 일정 관리 (새로운 시스템) =====
+
 
   static async updateSpecialScheduleItem(itemId: string, updates: Partial<SpecialScheduleItem>) {
     try {
@@ -294,40 +203,10 @@ export class DataService {
     }
   }
 
-  static async getSpecialScheduleItems(connectionId: string): Promise<SpecialScheduleItem[]> {
-    try {
-      const q = query(
-        collection(db, 'specialSchedules'),
-        where('connectionId', '==', connectionId),
-        orderBy('date', 'desc')
-      );
-      const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as SpecialScheduleItem[];
-    } catch (error) {
-      console.error('특별 일정 가져오기 오류:', error);
-      throw error;
-    }
-  }
 
-  static onSpecialScheduleItemsChange(connectionId: string, callback: (items: SpecialScheduleItem[]) => void): Unsubscribe {
-    const q = query(
-      collection(db, 'specialSchedules'),
-      where('connectionId', '==', connectionId),
-      orderBy('date', 'desc')
-    );
-    
-    return onSnapshot(q, (querySnapshot) => {
-      const items = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as SpecialScheduleItem[];
-      callback(items);
-    });
-  }
+
+
+
 
   // 근무 일정 관련
   static async saveWorkSchedule(userId: string, workSchedule: WorkSchedule) {
@@ -394,131 +273,10 @@ export class DataService {
     return cleaned;
   }
 
-  /**
-   * 특정 날짜의 스케줄 저장
-   * 경로: schedules/{connectionId}/children/{childId}/days/{YYYY-MM-DD}
-   */
-  static async saveDailySchedule(connectionId: string, childId: string, schedule: DailySchedule) {
-    try {
-      const docRef = doc(db, 'schedules', connectionId, 'children', childId, 'days', schedule.date);
-      const cleaned = DataService.cleanDailyScheduleForFirestore(schedule);
-      await setDoc(docRef, { ...cleaned, updatedAt: serverTimestamp() }, { merge: true });
-    } catch (error) {
-      console.error('날짜별 스케줄 저장 오류:', error);
-      throw error;
-    }
-  }
 
-  /**
-   * 특정 날짜의 스케줄 가져오기
-   */
-  static async getDailySchedule(connectionId: string, childId: string, date: string): Promise<DailySchedule | null> {
-    try {
-      const docRef = doc(db, 'schedules', connectionId, 'children', childId, 'days', date);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data() as any;
-        return {
-          date: data.date ?? date,
-          dayOfWeek: data.dayOfWeek ?? DataService.getDayOfWeek(date),
-          childId: data.childId ?? childId,
-          childcareActivities: data.childcareActivities ?? [],
-          afterSchoolActivities: data.afterSchoolActivities ?? [],
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error('날짜별 스케줄 가져오기 오류:', error);
-      throw error;
-    }
-  }
 
-  /**
-   * 특정 기간의 스케줄들 가져오기
-   */
-  static async getDateRangeSchedules(
-    connectionId: string, 
-    childId: string, 
-    dateRange: DateRange
-  ): Promise<DateRangeSchedules> {
-    try {
-      const q = query(
-        collection(db, 'schedules', connectionId, 'children', childId, 'days'),
-        where('date', '>=', dateRange.startDate),
-        where('date', '<=', dateRange.endDate),
-        orderBy('date', 'asc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const schedules: DateRangeSchedules = {};
-      
-      querySnapshot.docs.forEach(docSnap => {
-        const data = docSnap.data() as any;
-        const schedule: DailySchedule = {
-          date: data.date,
-          dayOfWeek: data.dayOfWeek ?? DataService.getDayOfWeek(data.date),
-          childId: data.childId ?? childId,
-          childcareActivities: data.childcareActivities ?? [],
-          afterSchoolActivities: data.afterSchoolActivities ?? [],
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-        };
-        schedules[data.date] = schedule;
-      });
-      
-      return schedules;
-    } catch (error) {
-      console.error('기간별 스케줄 가져오기 오류:', error);
-      throw error;
-    }
-  }
 
-  /**
-   * 현재 주의 스케줄들 가져오기 (월~일)
-   */
-  static async getCurrentWeekSchedules(connectionId: string, childId: string): Promise<DateRangeSchedules> {
-    const weekRange = DataService.getCurrentWeekRange();
-    return DataService.getDateRangeSchedules(connectionId, childId, weekRange);
-  }
 
-  /**
-   * 날짜별 스케줄 실시간 구독
-   */
-  static onDateRangeSchedulesChange(
-    connectionId: string,
-    childId: string,
-    dateRange: DateRange,
-    callback: (schedules: DateRangeSchedules) => void
-  ): Unsubscribe {
-    const q = query(
-      collection(db, 'schedules', connectionId, 'children', childId, 'days'),
-      where('date', '>=', dateRange.startDate),
-      where('date', '<=', dateRange.endDate),
-      orderBy('date', 'asc')
-    );
-    
-    return onSnapshot(q, (querySnapshot) => {
-      const schedules: DateRangeSchedules = {};
-      
-      querySnapshot.docs.forEach(docSnap => {
-        const data = docSnap.data() as any;
-        const schedule: DailySchedule = {
-          date: data.date,
-          dayOfWeek: data.dayOfWeek ?? DataService.getDayOfWeek(data.date),
-          childId: data.childId ?? childId,
-          childcareActivities: data.childcareActivities ?? [],
-          afterSchoolActivities: data.afterSchoolActivities ?? [],
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-        };
-        schedules[data.date] = schedule;
-      });
-      
-      callback(schedules);
-    });
-  }
 
   /**
    * 현재 주 범위 계산 (월요일 ~ 일요일)
@@ -567,165 +325,75 @@ export class DataService {
     return dayMap[dayIndex];
   }
 
-  // ===== 새로운 날짜별 식단 관리 함수들 =====
+
+
+
+
+
+  // ===== 데이터 정리 유틸리티 =====
   
-  /**
-   * 특정 날짜의 식단 저장
-   */
-  static async saveDailyMealPlan(connectionId: string, mealPlan: DailyMealPlanNew) {
-    try {
-      const docRef = doc(db, 'mealPlans', connectionId, 'dates', mealPlan.date);
-      await setDoc(docRef, {
-        ...mealPlan,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-    } catch (error) {
-      console.error('날짜별 식단 저장 오류:', error);
-      throw error;
-    }
+  // 중복 활동 정리 (래퍼 함수 - parentId 기반 함수 호출)
+  static async cleanupDuplicateActivities(parentId: string, childId: string, date: string) {
+    return DataService.cleanupDuplicateActivitiesByParentId(parentId, childId, date);
   }
-
-  /**
-   * 특정 기간의 식단들 가져오기
-   */
-  static async getDateRangeMealPlans(connectionId: string, dateRange: DateRange): Promise<DateRangeMealPlan> {
-    try {
-      const q = query(
-        collection(db, 'mealPlans', connectionId, 'dates'),
-        where('date', '>=', dateRange.startDate),
-        where('date', '<=', dateRange.endDate),
-        orderBy('date', 'asc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const mealPlans: DateRangeMealPlan = {};
-      
-      querySnapshot.docs.forEach(docSnap => {
-        const data = docSnap.data() as any;
-        const mealPlan: DailyMealPlanNew = {
-          date: data.date,
-          menu: data.menu ?? '',
-          notes: data.notes,
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-        };
-        mealPlans[data.date] = mealPlan;
-      });
-      
-      return mealPlans;
-    } catch (error) {
-      console.error('기간별 식단 가져오기 오류:', error);
-      throw error;
-    }
-  }
-
-  // ===== 새로운 날짜 기반 식사 계획 관리 =====
   
-  /**
-   * 특정 날짜의 식사 계획 저장
-   */
-  static async saveDateBasedMealPlan(connectionId: string, date: string, mealPlan: DailyMealPlanNew) {
+  // 중복 활동 정리 (같은 날짜, 같은 타입의 중복 템플릿 활동 제거) - parentId 기반
+  static async cleanupDuplicateActivitiesByParentId(parentId: string, childId: string, date: string) {
     try {
-      await setDoc(doc(db, 'mealPlans', connectionId, 'dates', date), {
-        ...mealPlan,
-        date,
-        createdAt: mealPlan.createdAt || serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      console.error('날짜별 식사 계획 저장 오류:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 특정 날짜의 식사 계획 가져오기
-   */
-  static async getDateBasedMealPlan(connectionId: string, date: string): Promise<DailyMealPlanNew | null> {
-    try {
-      const docSnap = await getDoc(doc(db, 'mealPlans', connectionId, 'dates', date));
+      const schedule = await DataService.getDailyScheduleByParentId(parentId, childId, date);
+      if (!schedule) return;
       
-      if (docSnap.exists()) {
-        return docSnap.data() as DailyMealPlanNew;
+      let hasChanges = false;
+      
+      // 기관 활동 중복 제거
+      if (schedule.childcareActivities && schedule.childcareActivities.length > 1) {
+        const templateActivities = schedule.childcareActivities.filter(act => act.id.startsWith('template-'));
+        if (templateActivities.length > 1) {
+          // 첫 번째만 유지, 나머지 제거
+          schedule.childcareActivities = schedule.childcareActivities.filter(act => 
+            !act.id.startsWith('template-') || act.id === templateActivities[0].id
+          );
+          hasChanges = true;
+          console.log(`🧹 ${date} 기관활동 중복 제거: ${templateActivities.length} → 1`);
+        }
       }
-      return null;
+      
+      // 하원 후 활동 중복 제거
+      if (schedule.afterSchoolActivities && schedule.afterSchoolActivities.length > 1) {
+        const templateActivities = schedule.afterSchoolActivities.filter(act => act.id.startsWith('template-'));
+        if (templateActivities.length > 1) {
+          // 첫 번째만 유지, 나머지 제거
+          schedule.afterSchoolActivities = schedule.afterSchoolActivities.filter(act => 
+            !act.id.startsWith('template-') || act.id === templateActivities[0].id
+          );
+          hasChanges = true;
+          console.log(`🧹 ${date} 하원후활동 중복 제거: ${templateActivities.length} → 1`);
+        }
+      }
+      
+      // 변경사항이 있으면 저장
+      if (hasChanges) {
+        await DataService.saveDailyScheduleByParentId(parentId, childId, schedule);
+        console.log(`✅ ${date} 중복 데이터 정리 완료`);
+      }
+      
     } catch (error) {
-      console.error('날짜별 식사 계획 가져오기 오류:', error);
-      throw error;
+      console.error(`❌ ${date} 중복 데이터 정리 실패:`, error);
     }
-  }
-
-  // getDateRangeMealPlans 함수는 이미 위에 구현되어 있음
-
-  /**
-   * 날짜 범위의 식사 계획 실시간 구독
-   */
-  static onDateBasedMealPlansChange(
-    connectionId: string, 
-    dateRange: DateRange, 
-    callback: (mealPlans: DateRangeMealPlan) => void
-  ): Unsubscribe {
-    const q = query(
-      collection(db, 'mealPlans', connectionId, 'dates'),
-      where('date', '>=', dateRange.startDate),
-      where('date', '<=', dateRange.endDate),
-      orderBy('date', 'asc')
-    );
-    
-    return onSnapshot(q, (querySnapshot) => {
-      const mealPlans: DateRangeMealPlan = {};
-      
-      querySnapshot.docs.forEach(docSnap => {
-        const data = docSnap.data() as DailyMealPlanNew;
-        mealPlans[data.date] = data;
-      });
-      
-      callback(mealPlans);
-    });
   }
 
   // ===== 반복 일정 템플릿 관리 =====
   
-  static async saveRecurringTemplate(connectionId: string, template: Omit<RecurringActivity, 'id' | 'createdAt' | 'updatedAt'>) {
+
+
+  static async updateRecurringTemplate(templateId: string, updates: Partial<RecurringActivity>) {
     try {
-      const templateRef = await addDoc(collection(db, 'recurringSchedules'), {
-        ...template,
-        connectionId,
-        createdAt: serverTimestamp(),
+      await updateDoc(doc(db, 'recurringSchedules', templateId), {
+        ...updates,
         updatedAt: serverTimestamp()
       });
-      return templateRef.id;
     } catch (error) {
-      console.error('반복 일정 템플릿 저장 오류:', error);
-      throw error;
-    }
-  }
-
-  static async getRecurringTemplates(connectionId: string, childId: string): Promise<RecurringActivity[]> {
-    try {
-      // 인덱스가 준비될 때까지 단순한 쿼리 사용
-      const q = query(
-        collection(db, 'recurringSchedules'),
-        where('connectionId', '==', connectionId),
-        where('childId', '==', childId)
-        // isActive 및 orderBy 제거로 인덱스 요구사항 감소
-      );
-      const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }) as RecurringActivity)
-        .filter(template => template.isActive !== false) // 클라이언트에서 필터링
-        .sort((a, b) => {
-          // 클라이언트에서 정렬
-          const aTime = a.createdAt?.toMillis?.() || 0;
-          const bTime = b.createdAt?.toMillis?.() || 0;
-          return bTime - aTime;
-        });
-    } catch (error) {
-      console.error('반복 일정 템플릿 가져오기 오류:', error);
+      console.error('반복 일정 템플릿 업데이트 오류:', error);
       throw error;
     }
   }
@@ -739,63 +407,43 @@ export class DataService {
     }
   }
 
-  static async applyRecurringTemplate(connectionId: string, childId: string, template: RecurringActivity) {
-    try {
-      const weekRange = DataService.getCurrentWeekRange();
-      const startDate = new Date(weekRange.weekStart);
-      
-      const updates = [];
-      
-      // 템플릿의 요일들에 해당하는 날짜들 찾기
-      for (let i = 0; i < 7; i++) {
-        const currentDate = new Date(startDate);
-        currentDate.setDate(startDate.getDate() + i);
-        const dayOfWeek = DataService.getDayOfWeek(DataService.formatDate(currentDate));
-        
-        if (template.daysOfWeek.includes(dayOfWeek)) {
-          const dateString = DataService.formatDate(currentDate);
-          
-          // 새 활동 생성
-          const newActivity: Activity = {
-            id: `template-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            description: template.name,
-            startTime: template.startTime,
-            endTime: template.endTime,
-            institutionName: template.institutionName || ''
-          };
-          
-          // 기존 스케줄 가져오기
-          const existingSchedule = await DataService.getDailySchedule(connectionId, childId, dateString);
-          
-          const updatedSchedule: DailySchedule = {
-            date: dateString,
-            dayOfWeek,
-            childId,
-            childcareActivities: template.activityType === 'childcare' 
-              ? [...(existingSchedule?.childcareActivities || []), newActivity]
-              : (existingSchedule?.childcareActivities || []),
-            afterSchoolActivities: template.activityType === 'afterSchool'
-              ? [...(existingSchedule?.afterSchoolActivities || []), newActivity] 
-              : (existingSchedule?.afterSchoolActivities || []),
-            createdAt: existingSchedule?.createdAt || new Date(),
-            updatedAt: new Date()
-          };
-          
-          updates.push({ dateString, schedule: updatedSchedule });
-        }
-      }
-      
-      // 모든 업데이트를 순차적으로 처리
-      for (const update of updates) {
-        await DataService.saveDailySchedule(connectionId, childId, update.schedule);
-        await new Promise(resolve => setTimeout(resolve, 100)); // 잠시 대기
-      }
-      
-    } catch (error) {
-      console.error('반복 일정 템플릿 적용 오류:', error);
-      throw error;
-    }
+
+  // 다음 주 범위 계산
+  static getNextWeekRange(): WeekRange {
+    const currentWeekRange = DataService.getCurrentWeekRange();
+    const nextWeekStart = new Date(currentWeekRange.weekStart);
+    nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+    
+    const nextWeekEnd = new Date(nextWeekStart);
+    nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+    
+    return {
+      startDate: DataService.formatDate(nextWeekStart),
+      endDate: DataService.formatDate(nextWeekEnd),
+      weekStart: DataService.formatDate(nextWeekStart)
+    };
   }
+
+  // 특정 주의 특정 요일에 해당하는 날짜 문자열 반환
+  static getDateStringForDayOfWeek(weekStartDate: string, dayOfWeek: DayOfWeek): string {
+    const startDate = new Date(weekStartDate);
+    const dayMap = {
+      [DayOfWeek.MONDAY]: 0,
+      [DayOfWeek.TUESDAY]: 1,
+      [DayOfWeek.WEDNESDAY]: 2,
+      [DayOfWeek.THURSDAY]: 3,
+      [DayOfWeek.FRIDAY]: 4,
+      [DayOfWeek.SATURDAY]: 5,
+      [DayOfWeek.SUNDAY]: 6
+    };
+    
+    const targetDate = new Date(startDate);
+    targetDate.setDate(startDate.getDate() + dayMap[dayOfWeek]);
+    
+    return DataService.formatDate(targetDate);
+  }
+
+
   // ===== 다대다 관계 타입 시스템 관련 함수들 =====
 
   // 다대다 연결 관리
@@ -1001,90 +649,403 @@ export class DataService {
 
   // ===== 간소화된 인수인계 시스템 =====
   
-  // 일일 인수인계 메모 생성
-  static async createDailyHandoverNote(note: Omit<DailyHandoverNote, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+
+
+
+
+
+
+  // ===== 래퍼 함수들 (기존 호환성 유지용) =====
+  
+  // 스케줄 관련 래퍼 함수들
+  static async saveDailySchedule(parentId: string, childId: string, schedule: DailySchedule) {
+    return DataService.saveDailyScheduleByParentId(parentId, childId, schedule);
+  }
+  
+  static async getDailySchedule(parentId: string, childId: string, date: string): Promise<DailySchedule | null> {
+    return DataService.getDailyScheduleByParentId(parentId, childId, date);
+  }
+  
+  static async getDateRangeSchedules(parentId: string, childId: string, dateRange: DateRange): Promise<DateRangeSchedules> {
+    return DataService.getDateRangeSchedulesByParentId(parentId, childId, dateRange);
+  }
+  
+  static async getCurrentWeekSchedules(parentId: string, childId: string): Promise<DateRangeSchedules> {
+    return DataService.getCurrentWeekSchedulesByParentId(parentId, childId);
+  }
+  
+  static onDateRangeSchedulesChange(
+    parentId: string,
+    childId: string,
+    dateRange: DateRange,
+    callback: (schedules: DateRangeSchedules) => void
+  ): Unsubscribe {
+    return DataService.onDateRangeSchedulesChangeByParentId(parentId, childId, dateRange, callback);
+  }
+  
+  // 식단 관련 래퍼 함수들
+  static async saveDateBasedMealPlan(parentId: string, date: string, mealPlan: DailyMealPlanNew) {
+    return DataService.saveDateBasedMealPlanByParentId(parentId, date, mealPlan);
+  }
+  
+  static async getDateBasedMealPlan(parentId: string, date: string): Promise<DailyMealPlanNew | null> {
+    return DataService.getDateBasedMealPlanByParentId(parentId, date);
+  }
+  
+  static async getDateRangeMealPlans(parentId: string, dateRange: DateRange): Promise<DateRangeMealPlan> {
+    return DataService.getDateRangeMealPlansByParentId(parentId, dateRange);
+  }
+  
+  static onDateBasedMealPlansChange(
+    parentId: string, 
+    dateRange: DateRange, 
+    callback: (mealPlans: DateRangeMealPlan) => void
+  ): Unsubscribe {
+    return DataService.onDateBasedMealPlansChangeByParentId(parentId, dateRange, callback);
+  }
+  
+  // 반복 템플릿 관련 래퍼 함수들
+  static async getRecurringTemplates(parentId: string, childId: string): Promise<RecurringActivity[]> {
+    return DataService.getRecurringTemplatesByParentId(parentId, childId);
+  }
+  
+  static async saveRecurringTemplate(parentId: string, template: Omit<RecurringActivity, 'id' | 'createdAt' | 'updatedAt'>) {
+    return DataService.saveRecurringTemplateByParentId(parentId, template);
+  }
+  
+  static async applyRecurringTemplate(parentId: string, childId: string, template: RecurringActivity) {
+    return DataService.applyRecurringTemplateByParentId(parentId, childId, template);
+  }
+  
+  static async applyRecurringTemplateToWeek(parentId: string, childId: string, template: RecurringActivity, weekRange: WeekRange) {
+    return DataService.applyRecurringTemplateToWeekByParentId(parentId, childId, template, weekRange);
+  }
+  
+  // 인수인계 관련 래퍼 함수들
+  static async createDailyHandoverNote(parentId: string, note: Omit<DailyHandoverNote, 'id'>): Promise<string> {
+    return DataService.saveDailyHandoverNoteByParentId(parentId, note);
+  }
+  
+  static async updateDailyHandoverNote(parentId: string, noteId: string, updates: Partial<DailyHandoverNote>): Promise<void> {
+    return DataService.updateDailyHandoverNoteByParentId(parentId, noteId, updates);
+  }
+  
+  static async deleteDailyHandoverNote(parentId: string, noteId: string): Promise<void> {
+    return DataService.deleteDailyHandoverNoteByParentId(parentId, noteId);
+  }
+  
+  static async getDailyHandoverNotes(parentId: string): Promise<DailyHandoverNote[]> {
+    return DataService.getDailyHandoverNotesByParentId(parentId);
+  }
+  
+  static onDailyHandoverNotesChange(parentId: string, callback: (notes: DailyHandoverNote[]) => void): Unsubscribe {
+    return DataService.onDailyHandoverNotesChangeByParentId(parentId, callback);
+  }
+  
+
+  // ===== PARENT ID 기반 데이터 접근 함수들 (새로운 통합 시스템용) =====
+
+
+  // ===== 스케줄 관련 - parentId 기반 =====
+
+  /**
+   * parentId 기반 날짜별 스케줄 저장
+   */
+  static async saveDailyScheduleByParentId(parentId: string, childId: string, schedule: DailySchedule) {
     try {
-      const noteRef = await addDoc(collection(db, 'dailyHandoverNotes', note.connectionId, 'notes'), {
+      const docRef = doc(db, 'schedules', parentId, 'children', childId, 'days', schedule.date);
+      const cleaned = DataService.cleanDailyScheduleForFirestore(schedule);
+      await setDoc(docRef, { ...cleaned, updatedAt: serverTimestamp() }, { merge: true });
+    } catch (error) {
+      console.error('parentId 기반 날짜별 스케줄 저장 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 특정 날짜의 스케줄 가져오기
+   */
+  static async getDailyScheduleByParentId(parentId: string, childId: string, date: string): Promise<DailySchedule | null> {
+    try {
+      const docRef = doc(db, 'schedules', parentId, 'children', childId, 'days', date);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data() as any;
+        return {
+          date: data.date ?? date,
+          dayOfWeek: data.dayOfWeek ?? DataService.getDayOfWeek(date),
+          childId: data.childId ?? childId,
+          childcareActivities: data.childcareActivities ?? [],
+          afterSchoolActivities: data.afterSchoolActivities ?? [],
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('parentId 기반 날짜별 스케줄 가져오기 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 특정 기간의 스케줄들 가져오기
+   */
+  static async getDateRangeSchedulesByParentId(
+    parentId: string, 
+    childId: string, 
+    dateRange: DateRange
+  ): Promise<DateRangeSchedules> {
+    try {
+      const q = query(
+        collection(db, 'schedules', parentId, 'children', childId, 'days'),
+        where('date', '>=', dateRange.startDate),
+        where('date', '<=', dateRange.endDate),
+        orderBy('date', 'asc')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const schedules: DateRangeSchedules = {};
+      
+      querySnapshot.docs.forEach(docSnap => {
+        const data = docSnap.data() as any;
+        const schedule: DailySchedule = {
+          date: data.date,
+          dayOfWeek: data.dayOfWeek ?? DataService.getDayOfWeek(data.date),
+          childId: data.childId ?? childId,
+          childcareActivities: data.childcareActivities ?? [],
+          afterSchoolActivities: data.afterSchoolActivities ?? [],
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        };
+        schedules[data.date] = schedule;
+      });
+      
+      return schedules;
+    } catch (error) {
+      console.error('parentId 기반 기간별 스케줄 가져오기 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 현재 주의 스케줄들 가져오기
+   */
+  static async getCurrentWeekSchedulesByParentId(parentId: string, childId: string): Promise<DateRangeSchedules> {
+    const weekRange = DataService.getCurrentWeekRange();
+    return DataService.getDateRangeSchedulesByParentId(parentId, childId, weekRange);
+  }
+
+  /**
+   * parentId 기반 날짜별 스케줄 실시간 구독
+   */
+  static onDateRangeSchedulesChangeByParentId(
+    parentId: string,
+    childId: string,
+    dateRange: DateRange,
+    callback: (schedules: DateRangeSchedules) => void
+  ): Unsubscribe {
+    const q = query(
+      collection(db, 'schedules', parentId, 'children', childId, 'days'),
+      where('date', '>=', dateRange.startDate),
+      where('date', '<=', dateRange.endDate),
+      orderBy('date', 'asc')
+    );
+    
+    return onSnapshot(q, (querySnapshot) => {
+      const schedules: DateRangeSchedules = {};
+      
+      querySnapshot.docs.forEach(docSnap => {
+        const data = docSnap.data() as any;
+        const schedule: DailySchedule = {
+          date: data.date,
+          dayOfWeek: data.dayOfWeek ?? DataService.getDayOfWeek(data.date),
+          childId: data.childId ?? childId,
+          childcareActivities: data.childcareActivities ?? [],
+          afterSchoolActivities: data.afterSchoolActivities ?? [],
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        };
+        schedules[data.date] = schedule;
+      });
+      
+      callback(schedules);
+    });
+  }
+
+  // ===== 식사 계획 관련 - parentId 기반 =====
+
+  /**
+   * parentId 기반 특정 날짜의 식사 계획 저장
+   */
+  static async saveDateBasedMealPlanByParentId(parentId: string, date: string, mealPlan: DailyMealPlanNew) {
+    try {
+      await setDoc(doc(db, 'mealPlans', parentId, 'dates', date), {
+        ...mealPlan,
+        date,
+        createdAt: mealPlan.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('parentId 기반 날짜별 식사 계획 저장 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 특정 날짜의 식사 계획 가져오기
+   */
+  static async getDateBasedMealPlanByParentId(parentId: string, date: string): Promise<DailyMealPlanNew | null> {
+    try {
+      const docSnap = await getDoc(doc(db, 'mealPlans', parentId, 'dates', date));
+      
+      if (docSnap.exists()) {
+        return docSnap.data() as DailyMealPlanNew;
+      }
+      return null;
+    } catch (error) {
+      console.error('parentId 기반 날짜별 식사 계획 가져오기 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 기간별 식사 계획 가져오기
+   */
+  static async getDateRangeMealPlansByParentId(
+    parentId: string, 
+    dateRange: DateRange
+  ): Promise<DateRangeMealPlan> {
+    try {
+      const q = query(
+        collection(db, 'mealPlans', parentId, 'dates'),
+        where('date', '>=', dateRange.startDate),
+        where('date', '<=', dateRange.endDate),
+        orderBy('date', 'asc')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const mealPlans: DateRangeMealPlan = {};
+      
+      querySnapshot.docs.forEach(docSnap => {
+        const data = docSnap.data() as any;
+        const mealPlan: DailyMealPlanNew = {
+          date: data.date,
+          menu: data.menu ?? '',
+          notes: data.notes,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        };
+        mealPlans[data.date] = mealPlan;
+      });
+      
+      return mealPlans;
+    } catch (error) {
+      console.error('parentId 기반 기간별 식단 가져오기 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 날짜 범위의 식사 계획 실시간 구독
+   */
+  static onDateBasedMealPlansChangeByParentId(
+    parentId: string, 
+    dateRange: DateRange, 
+    callback: (mealPlans: DateRangeMealPlan) => void
+  ): Unsubscribe {
+    const q = query(
+      collection(db, 'mealPlans', parentId, 'dates'),
+      where('date', '>=', dateRange.startDate),
+      where('date', '<=', dateRange.endDate),
+      orderBy('date', 'asc')
+    );
+    
+    return onSnapshot(q, (querySnapshot) => {
+      const mealPlans: DateRangeMealPlan = {};
+      
+      querySnapshot.docs.forEach(docSnap => {
+        const data = docSnap.data() as DailyMealPlanNew;
+        mealPlans[data.date] = data;
+      });
+      
+      callback(mealPlans);
+    });
+  }
+
+  // ===== 인수인계 메모 관련 - parentId 기반 =====
+
+  /**
+   * parentId 기반 인수인계 메모 저장
+   */
+  static async saveDailyHandoverNoteByParentId(parentId: string, note: Omit<DailyHandoverNote, 'id'>): Promise<string> {
+    try {
+      const noteRef = await addDoc(collection(db, 'dailyHandoverNotes', parentId, 'notes'), {
         ...note,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       return noteRef.id;
     } catch (error) {
-      console.error('인수인계 메모 생성 오류:', error);
+      console.error('parentId 기반 인수인계 메모 저장 오류:', error);
       throw error;
     }
   }
 
-  // 당일 인수인계 메모 조회
-  static async getTodayHandoverNotes(connectionId: string, date: string): Promise<DailyHandoverNote[]> {
+  /**
+   * parentId 기반 인수인계 메모 업데이트
+   */
+  static async updateDailyHandoverNoteByParentId(parentId: string, noteId: string, updates: Partial<DailyHandoverNote>): Promise<void> {
     try {
-      const q = query(
-        collection(db, 'dailyHandoverNotes', connectionId, 'notes'),
-        where('date', '==', date),
-        orderBy('createdAt', 'desc')
-      );
-      const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as DailyHandoverNote[];
-    } catch (error) {
-      console.error('당일 인수인계 메모 조회 오류:', error);
-      throw error;
-    }
-  }
-
-  // 요일별 인수인계 메모 검색
-  static async getHandoverNotesByDayOfWeek(connectionId: string, dayOfWeek: DayOfWeek): Promise<DailyHandoverNote[]> {
-    try {
-      const q = query(
-        collection(db, 'dailyHandoverNotes', connectionId, 'notes'),
-        where('dayOfWeek', '==', dayOfWeek),
-        orderBy('createdAt', 'desc')
-      );
-      const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as DailyHandoverNote[];
-    } catch (error) {
-      console.error('요일별 인수인계 메모 조회 오류:', error);
-      throw error;
-    }
-  }
-
-  // 인수인계 메모 수정
-  static async updateDailyHandoverNote(noteId: string, connectionId: string, updates: Partial<DailyHandoverNote>): Promise<void> {
-    try {
-      await updateDoc(doc(db, 'dailyHandoverNotes', connectionId, 'notes', noteId), {
+      await updateDoc(doc(db, 'dailyHandoverNotes', parentId, 'notes', noteId), {
         ...updates,
         updatedAt: serverTimestamp()
       });
     } catch (error) {
-      console.error('인수인계 메모 수정 오류:', error);
+      console.error('parentId 기반 인수인계 메모 업데이트 오류:', error);
       throw error;
     }
   }
 
-  // 인수인계 메모 삭제
-  static async deleteDailyHandoverNote(noteId: string, connectionId: string): Promise<void> {
+  /**
+   * parentId 기반 인수인계 메모 삭제
+   */
+  static async deleteDailyHandoverNoteByParentId(parentId: string, noteId: string): Promise<void> {
     try {
-      await deleteDoc(doc(db, 'dailyHandoverNotes', connectionId, 'notes', noteId));
+      await deleteDoc(doc(db, 'dailyHandoverNotes', parentId, 'notes', noteId));
     } catch (error) {
-      console.error('인수인계 메모 삭제 오류:', error);
+      console.error('parentId 기반 인수인계 메모 삭제 오류:', error);
       throw error;
     }
   }
 
-  // 인수인계 메모 실시간 구독
-  static onDailyHandoverNotesChange(connectionId: string, callback: (notes: DailyHandoverNote[]) => void): Unsubscribe {
-    const today = new Date().toISOString().split('T')[0];
+  /**
+   * parentId 기반 인수인계 메모 가져오기
+   */
+  static async getDailyHandoverNotesByParentId(parentId: string): Promise<DailyHandoverNote[]> {
+    try {
+      const q = query(
+        collection(db, 'dailyHandoverNotes', parentId, 'notes'),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as DailyHandoverNote[];
+    } catch (error) {
+      console.error('parentId 기반 인수인계 메모 가져오기 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 인수인계 메모 실시간 구독
+   */
+  static onDailyHandoverNotesChangeByParentId(parentId: string, callback: (notes: DailyHandoverNote[]) => void): Unsubscribe {
     const q = query(
-      collection(db, 'dailyHandoverNotes', connectionId, 'notes'),
-      where('date', '==', today),
+      collection(db, 'dailyHandoverNotes', parentId, 'notes'),
       orderBy('createdAt', 'desc')
     );
     
@@ -1095,6 +1056,378 @@ export class DataService {
       })) as DailyHandoverNote[];
       callback(notes);
     });
+  }
+
+  // ===== 반복 일정 관련 - parentId 기반 =====
+
+  /**
+   * parentId 기반 반복 일정 템플릿 적용 (현재 주)
+   */
+  static async applyRecurringTemplateByParentId(parentId: string, childId: string, template: RecurringActivity) {
+    try {
+      const weekRange = DataService.getCurrentWeekRange();
+      const startDate = new Date(weekRange.weekStart);
+      
+      const updates = [];
+      
+      // 템플릿의 요일들에 해당하는 날짜들 찾기
+      for (let i = 0; i < 7; i++) {
+        const currentDate = new Date(startDate);
+        currentDate.setDate(startDate.getDate() + i);
+        const dayOfWeek = DataService.getDayOfWeek(DataService.formatDate(currentDate));
+        
+        if (template.daysOfWeek.includes(dayOfWeek)) {
+          const dateString = DataService.formatDate(currentDate);
+          
+          const activityType = template.activityType === 'childcare' ? 'childcareActivities' : 'afterSchoolActivities';
+          
+          // 새 활동 생성
+          const newActivity: Activity = {
+            id: `template-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            description: template.activityType === 'childcare' && template.institutionName ? 
+              template.institutionName : (template.name || template.institutionName || ''),
+            startTime: template.startTime,
+            endTime: template.endTime,
+            institutionName: template.institutionName || ''
+          };
+          
+          // 기존 스케줄 가져오기
+          const currentSchedule = await DataService.getDailyScheduleByParentId(parentId, childId, dateString);
+          
+          const updatedSchedule: DailySchedule = {
+            date: dateString,
+            dayOfWeek,
+            childId,
+            childcareActivities: template.activityType === 'childcare' 
+              ? [...(currentSchedule?.childcareActivities || []), newActivity]
+              : (currentSchedule?.childcareActivities || []),
+            afterSchoolActivities: template.activityType === 'afterSchool'
+              ? [...(currentSchedule?.afterSchoolActivities || []), newActivity] 
+              : (currentSchedule?.afterSchoolActivities || []),
+            createdAt: currentSchedule?.createdAt || new Date(),
+            updatedAt: new Date()
+          };
+          
+          updates.push({ dateString, schedule: updatedSchedule });
+        }
+      }
+      
+      // 모든 업데이트를 순차적으로 처리
+      for (const update of updates) {
+        await DataService.saveDailyScheduleByParentId(parentId, childId, update.schedule);
+        await new Promise(resolve => setTimeout(resolve, 100)); // 잠시 대기
+      }
+      
+    } catch (error) {
+      console.error('parentId 기반 반복 일정 템플릿 적용 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 특정 주에 템플릿 적용
+   */
+  static async applyRecurringTemplateToWeekByParentId(parentId: string, childId: string, template: RecurringActivity, weekRange: WeekRange) {
+    try {
+      const startDate = new Date(weekRange.weekStart);
+      const updates = [];
+      
+      // 템플릿의 요일들에 해당하는 날짜들 찾기
+      for (let i = 0; i < 7; i++) {
+        const currentDate = new Date(startDate);
+        currentDate.setDate(startDate.getDate() + i);
+        const dayOfWeek = DataService.getDayOfWeek(DataService.formatDate(currentDate));
+        
+        if (template.daysOfWeek.includes(dayOfWeek)) {
+          const dateString = DataService.formatDate(currentDate);
+          
+          // 새 활동 생성
+          const newActivity: Activity = {
+            id: `template-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            description: template.activityType === 'childcare' && template.institutionName ? 
+              template.institutionName : (template.name || template.institutionName || ''),
+            startTime: template.startTime,
+            endTime: template.endTime,
+            institutionName: template.institutionName || ''
+          };
+          
+          // 기존 스케줄 가져오기
+          const currentSchedule = await DataService.getDailyScheduleByParentId(parentId, childId, dateString);
+          
+          const updatedSchedule: DailySchedule = {
+            date: dateString,
+            dayOfWeek,
+            childId,
+            childcareActivities: template.activityType === 'childcare' 
+              ? [...(currentSchedule?.childcareActivities || []), newActivity]
+              : (currentSchedule?.childcareActivities || []),
+            afterSchoolActivities: template.activityType === 'afterSchool'
+              ? [...(currentSchedule?.afterSchoolActivities || []), newActivity] 
+              : (currentSchedule?.afterSchoolActivities || []),
+            createdAt: currentSchedule?.createdAt || new Date(),
+            updatedAt: new Date()
+          };
+          
+          updates.push({ dateString, schedule: updatedSchedule });
+        }
+      }
+      
+      // 모든 업데이트를 순차적으로 처리
+      for (const update of updates) {
+        await DataService.saveDailyScheduleByParentId(parentId, childId, update.schedule);
+        await new Promise(resolve => setTimeout(resolve, 100)); // 잠시 대기
+      }
+      
+    } catch (error) {
+      console.error('parentId 기반 특정 주에 반복 일정 템플릿 적용 오류:', error);
+      throw error;
+    }
+  }
+
+  // ===== 투약 정보 관련 - parentId 기반 =====
+
+  /**
+   * parentId 기반 투약 정보 추가
+   */
+  static async addMedicationByParentId(parentId: string, medication: Omit<Medication, 'id'>) {
+    try {
+      const cleanedMedication = DataService.cleanMedication(medication);
+      await addDoc(collection(db, 'medications'), {
+        ...cleanedMedication,
+        parentId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('parentId 기반 투약 정보 추가 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 투약 정보 가져오기
+   */
+  static async getMedicationsByParentId(parentId: string): Promise<Medication[]> {
+    try {
+      const q = query(
+        collection(db, 'medications'),
+        where('parentId', '==', parentId),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Medication[];
+    } catch (error) {
+      console.error('parentId 기반 투약 정보 가져오기 오류:', error);
+      return [];
+    }
+  }
+
+  /**
+   * parentId 기반 투약 정보 실시간 구독
+   */
+  static onMedicationsByParentIdChange(parentId: string, callback: (medications: Medication[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'medications'),
+      where('parentId', '==', parentId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    return onSnapshot(q, (querySnapshot) => {
+      const medications = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Medication[];
+      callback(medications);
+    });
+  }
+
+  // ===== 특별 일정 관련 - parentId 기반 =====
+
+  /**
+   * parentId 기반 특별 일정 추가 (권한 기반)
+   */
+  static async addSpecialScheduleItemWithPermissionByParentId(parentId: string, item: Omit<SpecialScheduleItem, 'id'>, requesterId: string, targetUserId?: string) {
+    try {
+      // Clean data to remove undefined fields
+      const cleanedItem = DataService.cleanSpecialScheduleItem(item);
+      const cleanedData: any = {
+        ...cleanedItem,
+        parentId,
+        createdBy: requesterId,
+        status: 'PENDING',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      
+      // Only add targetUserId if it's defined and not empty
+      if (targetUserId && targetUserId.trim() !== '') {
+        cleanedData.targetUserId = targetUserId;
+      }
+      
+      await addDoc(collection(db, 'specialSchedules'), cleanedData);
+    } catch (error) {
+      console.error('parentId 기반 특별 일정 추가 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * parentId 기반 특별 일정 가져오기
+   */
+  static async getSpecialScheduleItemsByParentId(parentId: string): Promise<SpecialScheduleItem[]> {
+    try {
+      const q = query(
+        collection(db, 'specialSchedules'),
+        where('parentId', '==', parentId),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SpecialScheduleItem[];
+    } catch (error) {
+      console.error('parentId 기반 특별 일정 가져오기 오류:', error);
+      return [];
+    }
+  }
+
+  /**
+   * parentId 기반 특별 일정 가져오기 (필터 적용)
+   */
+  static async getSpecialScheduleItemsWithFilterByParentId(parentId: string, userType: string, userId: string): Promise<SpecialScheduleItem[]> {
+    try {
+      const q = query(
+        collection(db, 'specialSchedules'),
+        where('parentId', '==', parentId),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      const allItems = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SpecialScheduleItem[];
+
+      // 권한에 따른 필터링
+      return allItems.filter(item => {
+        if (userType === 'PARENT') {
+          // 부모는 모든 특별 일정을 볼 수 있음
+          return true;
+        } else {
+          // 돌보선생님은 자신이 대상인 것 또는 자신이 작성한 것만 보기
+          return item.targetUserId === userId || item.createdBy === userId || !item.targetUserId;
+        }
+      });
+    } catch (error) {
+      console.error('parentId 기반 특별 일정 필터 가져오기 오류:', error);
+      return [];
+    }
+  }
+
+  /**
+   * parentId 기반 특별 일정 실시간 구독
+   */
+  static onSpecialScheduleItemsByParentIdChange(parentId: string, callback: (items: SpecialScheduleItem[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'specialSchedules'),
+      where('parentId', '==', parentId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    return onSnapshot(q, (querySnapshot) => {
+      const items = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SpecialScheduleItem[];
+      callback(items);
+    });
+  }
+
+  /**
+   * parentId 기반 특별 일정 실시간 구독 (필터 적용)
+   */
+  static onSpecialScheduleItemsWithFilterByParentIdChange(parentId: string, userType: string, userId: string, callback: (items: SpecialScheduleItem[]) => void): Unsubscribe {
+    const q = query(
+      collection(db, 'specialSchedules'),
+      where('parentId', '==', parentId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    return onSnapshot(q, (querySnapshot) => {
+      const allItems = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SpecialScheduleItem[];
+
+      // 권한에 따른 필터링
+      const filteredItems = allItems.filter(item => {
+        if (userType === 'PARENT') {
+          // 부모는 모든 특별 일정을 볼 수 있음
+          return true;
+        } else {
+          // 돌보선생님은 자신이 대상인 것 또는 자신이 작성한 것만 보기
+          return item.targetUserId === userId || item.createdBy === userId || !item.targetUserId;
+        }
+      });
+      callback(filteredItems);
+    });
+  }
+
+  // ===== 반복 템플릿 관련 - parentId 기반 =====
+
+  /**
+   * parentId 기반 반복 템플릿 가져오기
+   */
+  static async getRecurringTemplatesByParentId(parentId: string, childId: string): Promise<RecurringActivity[]> {
+    try {
+      const q = query(
+        collection(db, 'recurringSchedules'),
+        where('parentId', '==', parentId),
+        where('childId', '==', childId),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as RecurringActivity[];
+    } catch (error) {
+      console.error('parentId 기반 반복 템플릿 가져오기 오류:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Firestore 저장용 RecurringActivity 정제 함수 (undefined 제거)
+   */
+  private static cleanRecurringTemplate(template: any): any {
+    const cleaned: any = {};
+    Object.entries(template).forEach(([key, value]) => {
+      if (value !== undefined) cleaned[key] = value;
+    });
+    return cleaned;
+  }
+
+  /**
+   * parentId 기반 반복 템플릿 저장
+   */
+  static async saveRecurringTemplateByParentId(parentId: string, template: Omit<RecurringActivity, 'id' | 'createdAt' | 'updatedAt'>) {
+    try {
+      const cleanedTemplate = DataService.cleanRecurringTemplate({
+        ...template,
+        parentId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      await addDoc(collection(db, 'recurringSchedules'), cleanedTemplate);
+    } catch (error) {
+      console.error('parentId 기반 반복 템플릿 저장 오류:', error);
+      throw error;
+    }
   }
 }
 

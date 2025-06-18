@@ -40,8 +40,8 @@ export const MedicationCard: React.FC<MedicationCardProps> = ({
     <div className="w-full">
         <div className="flex justify-between items-start">
             <div>
-                <p className="text-xs text-gray-500">{childName ? `${childName} - ` : ''}{medication.symptoms}</p>
-                 <div className="flex flex-wrap gap-1 mt-1">
+                <p className="text-xs text-gray-500 mb-1">{new Date(medication.date).toLocaleDateString()}</p>
+                 <div className="flex flex-wrap gap-1">
                     {medication.medicationTypes.map(type => (
                         <span key={type} className="text-xs px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded-full flex items-center">
                             {getIconForMedType(type)}

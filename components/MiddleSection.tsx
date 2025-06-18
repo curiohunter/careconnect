@@ -61,19 +61,6 @@ export const MiddleSection: React.FC<MiddleSectionProps> = ({
   
   return (
     <section className="space-y-6">
-      {isEditingMealPlan && onExitEdit && (
-        <div>
-          <button
-            onClick={onExitEdit}
-            className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-          >
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            식사 편집 종료
-          </button>
-        </div>
-      )}
       
       <div>
         <div className="flex justify-between items-center mb-4">
@@ -97,10 +84,6 @@ export const MiddleSection: React.FC<MiddleSectionProps> = ({
           </div>
         )}
 
-        {/* 안내 메시지 */}
-        <div className="mt-3 text-xs text-gray-500">
-          <p>💡 날짜별 모드: 특정 날짜에 맞춤형 식사 계획을 설정할 수 있습니다.</p>
-        </div>
       </div>
       <div>
         <div className="flex justify-between items-center mb-3">
