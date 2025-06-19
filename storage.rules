@@ -1,8 +1,28 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // 기본 규칙: 모든 접근 거부
     match /{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
+    }
+    
+    // 사용자별 프로필 이미지 폴더
+    match /profiles/{userId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 아이 이미지 폴더 - 연결 ID 기반 접근 제어
+    match /children/{connectionId}/{childId}/{fileName} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/connections/$(connectionId)) &&
+        (get(/databases/$(database)/documents/connections/$(connectionId)).data.parentId == request.auth.uid ||
+         get(/databases/$(database)/documents/connections/$(connectionId)).data.careProviderId == request.auth.uid);
+    }
+    
+    // parentId 기반 아이 이미지 폴더 (부모용 통합 데이터)
+    match /children-by-parent/{parentId}/{childId}/{fileName} {
+      allow read, write: if request.auth != null && request.auth.uid == parentId;
     }
   }
 }

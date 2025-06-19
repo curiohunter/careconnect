@@ -2,6 +2,9 @@
 import React from 'react';
 import { trackError } from './analytics';
 
+// 환경 변수 확인
+const isDevelopment = import.meta.env.DEV || import.meta.env.NODE_ENV === 'development';
+
 export interface ErrorLog {
   id: string;
   timestamp: number;
@@ -84,8 +87,13 @@ class ErrorMonitor {
     // Analytics로 전송
     trackError(error, context.component);
 
-    // 콘솔에 로그
-    console.error('🚨 에러 모니터링:', errorLog);
+    // 개발 환경에서만 상세 에러 로그 출력
+    if (isDevelopment) {
+      console.error('🚨 에러 모니터링:', errorLog);
+    } else {
+      // 프로덕션에서는 간단한 에러 메시지만
+      console.error('에러 발생:', error.message);
+    }
 
     // 심각한 에러는 즉시 알림
     if (severity === 'critical') {
@@ -138,6 +146,32 @@ class ErrorMonitor {
       error => severityOrder[error.severity] >= minLevel
     );
   }
+
+  // 개발 환경에서만 디버그 로그 출력
+  debug(...args: any[]) {
+    if (isDevelopment) {
+      console.log('🔍', ...args);
+    }
+  }
+
+  // 개발 환경에서만 정보 로그 출력
+  info(...args: any[]) {
+    if (isDevelopment) {
+      console.log('ℹ️', ...args);
+    }
+  }
+
+  // 개발 환경에서만 성공 로그 출력
+  success(...args: any[]) {
+    if (isDevelopment) {
+      console.log('✅', ...args);
+    }
+  }
+
+  // 항상 경고 로그 출력 (프로덕션에서도 필요)
+  warn(...args: any[]) {
+    console.warn('⚠️', ...args);
+  }
 }
 
 // 전역 에러 모니터 인스턴스
@@ -150,6 +184,15 @@ export const logError = (error: Error, component?: string, action?: string) => {
 
 export const logCriticalError = (error: Error, component?: string, action?: string) => {
   errorMonitor.logError(error, { component, action }, 'critical');
+};
+
+// 편의 로그 함수들
+export const logger = {
+  debug: (...args: any[]) => errorMonitor.debug(...args),
+  info: (...args: any[]) => errorMonitor.info(...args),
+  success: (...args: any[]) => errorMonitor.success(...args),
+  warn: (...args: any[]) => errorMonitor.warn(...args),
+  error: (error: Error, component?: string, action?: string) => errorMonitor.logError(error, { component, action })
 };
 
 // React 컴포넌트용 에러 바운더리 HOC

@@ -15,6 +15,7 @@ import {
   Unsubscribe
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { logger } from '../errorMonitor';
 import {
   Medication, 
   SpecialScheduleItem, 
@@ -43,44 +44,44 @@ export class DataService {
   
   // Children management wrappers
   static async saveChildren(connectionId: string, children: ChildInfo[]) {
-    console.warn('saveChildren with connectionId is deprecated. Use parentId-based functions.');
+    logger.warn('saveChildren with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('saveChildren with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   static async getChildren(connectionId: string): Promise<ChildInfo[]> {
-    console.warn('getChildren with connectionId is deprecated. Use parentId-based functions.');
+    logger.warn('getChildren with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('getChildren with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   // Meal plan wrappers
   static async getMealPlan(connectionId: string): Promise<DailyMealPlan | null> {
-    console.warn('getMealPlan with connectionId is deprecated. Use parentId-based functions.');
+    logger.warn('getMealPlan with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('getMealPlan with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   static async saveMealPlan(connectionId: string, mealPlan: DailyMealPlan) {
-    console.warn('saveMealPlan with connectionId is deprecated. Use parentId-based functions.');
+    logger.warn('saveMealPlan with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('saveMealPlan with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   static onMealPlanChange(connectionId: string, callback: (mealPlan: DailyMealPlan | null) => void): Unsubscribe {
-    console.warn('onMealPlanChange with connectionId is deprecated. Use parentId-based functions.');
+    logger.warn('onMealPlanChange with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('onMealPlanChange with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   // Medication wrappers
   static async addMedication(connectionId: string, medication: Omit<Medication, 'id'>) {
-    console.warn('addMedication with connectionId is deprecated. Use parentId-based functions.');
+    logger.warn('addMedication with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('addMedication with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   static async getMedications(connectionId: string): Promise<Medication[]> {
-    console.warn('getMedications with connectionId is deprecated. Use parentId-based functions.');
+    logger.warn('getMedications with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('getMedications with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   static onMedicationsChange(connectionId: string, callback: (medications: Medication[]) => void): Unsubscribe {
-    console.warn('onMedicationsChange with connectionId is deprecated. Use parentId-based functions.');
+    logger.warn('onMedicationsChange with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('onMedicationsChange with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 

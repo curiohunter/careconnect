@@ -199,23 +199,18 @@ export const InviteCodeManager: React.FC<InviteCodeManagerProps> = ({ isOpen, on
         <div className="space-y-6">
           {/* 내 초대 코드 생성/공유 */}
           <div>
-            <h4 className="text-md font-medium mb-3">내 초대 코드</h4>
-            {inviteCode ? (
+            <h4 className="text-md font-medium mb-3">
+              {connections.length > 0 ? '새 초대 코드 생성' : '내 초대 코드'}
+            </h4>
+            {inviteCode && !codeStatus?.isUsed ? (
               <div>
                 <div className="flex items-center space-x-2">
-                  <div className={`flex-1 px-3 py-2 border rounded-md font-mono text-lg tracking-wide text-center ${
-                    codeStatus?.isUsed ? 'bg-gray-100 text-gray-500' : 'bg-gray-50'
-                  }`}>
+                  <div className="flex-1 px-3 py-2 border rounded-md font-mono text-lg tracking-wide text-center bg-gray-50">
                     {inviteCode}
                   </div>
                   <button
                     onClick={handleCopyCode}
-                    disabled={codeStatus?.isUsed}
-                    className={`p-2 text-white rounded-md ${
-                      codeStatus?.isUsed 
-                        ? 'bg-gray-400 cursor-not-allowed' 
-                        : 'bg-primary hover:bg-blue-700'
-                    }`}
+                    className="p-2 text-white rounded-md bg-primary hover:bg-blue-700"
                     title="복사"
                   >
                     <CopyIcon className="w-5 h-5" />
@@ -230,15 +225,7 @@ export const InviteCodeManager: React.FC<InviteCodeManagerProps> = ({ isOpen, on
                   </button>
                 </div>
                 
-                {/* 코드 상태 안내 - 연결이 없을 때만 표시 */}
-                {connections.length === 0 && codeStatus?.isUsed && (
-                  <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-sm">
-                    <p className="text-orange-800 font-medium">⚠️ 이 코드는 이미 사용되었습니다</p>
-                    <p className="text-orange-600">새로운 사람과 연결하려면 새 코드를 생성하세요.</p>
-                  </div>
-                )}
-                
-                {connections.length === 0 && codeStatus?.isExpired && (
+                {codeStatus?.isExpired && (
                   <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm">
                     <p className="text-red-800 font-medium">❌ 이 코드는 만료되었습니다</p>
                     <p className="text-red-600">새로운 코드를 생성하세요.</p>
@@ -256,9 +243,11 @@ export const InviteCodeManager: React.FC<InviteCodeManagerProps> = ({ isOpen, on
             )}
             
             <p className="mt-2 text-sm text-gray-500">
-              {codeStatus?.isUsed || codeStatus?.isExpired ? 
-                '새로운 코드를 생성하여 다른 사람과 연결하세요.' :
-                `이 코드를 ${userProfile?.userType === 'PARENT' ? '돌봄 선생님' : '부모'}에게 공유하세요.`
+              {connections.length > 0 ?
+                `새로운 ${userProfile?.userType === 'PARENT' ? '돌봄 선생님' : '부모'}과 연결하기 위한 초대 코드를 생성하세요.` :
+                codeStatus?.isUsed ? 
+                  '새로운 코드를 생성하여 연결하세요.' :
+                  `이 코드를 ${userProfile?.userType === 'PARENT' ? '돌봄 선생님' : '부모'}에게 공유하세요.`
               }
             </p>
           </div>

@@ -24,18 +24,19 @@ import {
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import { UserProfile, InviteCode, Connection, UserType } from '../types';
+import { logger } from '../errorMonitor';
 
 // 인증 서비스
 export class AuthService {
   // Google 로그인 (popup 방식으로 복구)
   static async signInWithGoogle() {
     try {
-      console.log('🔄 Google 로그인 시도 중...');
+      logger.info('🔄 Google 로그인 시도 중...');
       
       const result = await signInWithPopup(auth, googleProvider);
       return await this.processAuthResult(result);
     } catch (error) {
-      console.error('❌ Google 로그인 오류:', error);
+      logger.error(error as Error, 'authService', 'signInWithGoogle');
       throw error;
     }
   }
@@ -43,19 +44,19 @@ export class AuthService {
   // 로그인 결과 처리 (redirect 후 호출)
   static async handleRedirectResult() {
     try {
-      console.log('🔍 getRedirectResult 호출 중...');
+      logger.info('🔍 getRedirectResult 호출 중...');
       const result = await getRedirectResult(auth);
-      console.log('📋 getRedirectResult 결과:', result);
+      logger.debug('📋 getRedirectResult 결과:', result);
       
       if (result) {
-        console.log('🔄 Redirect 로그인 결과 처리 중...', result.user.email);
+        logger.info('🔄 Redirect 로그인 결과 처리 중...', result.user.email);
         return await this.processAuthResult(result);
       }
       
-      console.log('ℹ️ Redirect 결과가 null - 정상적인 페이지 로드');
+      logger.info('ℹ️ Redirect 결과가 null - 정상적인 페이지 로드');
       return null;
     } catch (error) {
-      console.error('❌ Redirect 결과 처리 오류:', error);
+      logger.error(error as Error, 'authService', 'handleRedirectResult');
       throw error;
     }
   }
@@ -63,27 +64,27 @@ export class AuthService {
   // 공통 인증 결과 처리
   static async processAuthResult(result: any) {
     const user = result.user;
-    console.log('✅ Google 로그인 성공:', user.email);
+    logger.success('✅ Google 로그인 성공:', user.email);
     
     // 기존 사용자 프로필 확인
-    console.log('🔍 사용자 프로필 확인 중...', user.uid);
+    logger.info('🔍 사용자 프로필 확인 중...', user.uid);
     let profile = await this.getUserProfile(user.uid);
-    console.log('📋 프로필 결과:', profile);
+    logger.debug('📋 프로필 결과:', profile);
     
     // 신규 사용자인 경우 프로필 생성 안내
     if (!profile) {
-      console.log('🆕 신규 사용자 - 프로필 설정 필요');
+      logger.info('🆕 신규 사용자 - 프로필 설정 필요');
       return { user, profile: null, isNewUser: true };
     }
     
-    console.log('👤 기존 사용자 - 로그인 완료');
+    logger.success('👤 기존 사용자 - 로그인 완룼');
     return { user, profile, isNewUser: false };
   }
 
   // 사용자 프로필 생성 (Google 로그인 후 호출)
   static async createUserProfile(user: User, additionalData: Omit<UserProfile, 'id' | 'email' | 'createdAt' | 'updatedAt'>) {
     try {
-      console.log('🔄 프로필 생성 시작:', {
+      logger.info('🔄 프로필 생성 시작:', {
         uid: user.uid,
         email: user.email,
         authenticated: !!auth.currentUser,
@@ -365,6 +366,40 @@ export class ConnectionService {
       });
       console.log('✅ 사용자1 프로필 업데이트 완료');
       
+      // 돌봄선생님인 경우 allowedParentIds 업데이트
+      if (!isUser1Parent) { // userId1이 돌봄선생님인 경우
+        const userRef = doc(db, 'users', userId1);
+        const userDoc = await getDoc(userRef);
+        const allowedParentIds = userDoc.exists() ? 
+          (userDoc.data().allowedParentIds || []) : [];
+        
+        if (!allowedParentIds.includes(parentId)) {
+          allowedParentIds.push(parentId);
+          await updateDoc(userRef, {
+            allowedParentIds,
+            updatedAt: serverTimestamp()
+          });
+          // 돌봄선생님 allowedParentIds 업데이트 완료
+        }
+      }
+      
+      // 사용자2가 돌봄선생님인 경우 allowedParentIds 업데이트
+      if (isUser1Parent) { // userId2가 돌봄선생님인 경우
+        const userRef = doc(db, 'users', userId2);
+        const userDoc = await getDoc(userRef);
+        const allowedParentIds = userDoc.exists() ? 
+          (userDoc.data().allowedParentIds || []) : [];
+        
+        if (!allowedParentIds.includes(parentId)) {
+          allowedParentIds.push(parentId);
+          await updateDoc(userRef, {
+            allowedParentIds,
+            updatedAt: serverTimestamp()
+          });
+          // 돌봄선생님(사용자2) allowedParentIds 업데이트 완료
+        }
+      }
+      
       // 상대방(사용자2) 프로필은 별도 트리거로 업데이트하거나, 
       // 여기서는 연결 문서만 생성하고 각자 로그인 시 connectionIds 동기화
       console.log('ℹ️ 사용자2 프로필은 다음 로그인 시 자동 동기화됩니다.');
@@ -386,9 +421,71 @@ export class ConnectionService {
         return { id: docSnap.id, ...docSnap.data() } as Connection;
       }
       return null;
-    } catch (error) {
+    } catch (error: any) {
+      // 권한 오류는 연결이 삭제된 경우이므로 조용히 처리
+      if (error?.code === 'permission-denied') {
+        console.log(`연결 ${connectionId}이 삭제되었거나 접근 권한이 없습니다.`);
+        return null;
+      }
       console.error('연결 정보 가져오기 오류:', error);
       throw error;
+    }
+  }
+
+  // 사용자의 allowedParentIds 동기화
+  static async syncAllowedParentIds(userId: string) {
+    try {
+      const userProfile = await AuthService.getUserProfile(userId);
+      if (!userProfile || (userProfile.userType !== UserType.CAREGIVER && userProfile.userType !== '돌봄 선생님' && userProfile.userType !== 'CARE_PROVIDER')) {
+        return; // 돌봄선생님이 아니면 스킵
+      }
+
+      // 사용자의 모든 연결 가져오기
+      const connections = await this.getUserConnections(userId);
+      const parentIds = connections.map(conn => conn.parentId);
+
+      // users에 allowedParentIds 업데이트
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        allowedParentIds: parentIds,
+        updatedAt: serverTimestamp()
+      });
+
+      // allowedParentIds 동기화 완료
+    } catch (error) {
+      console.error('allowedParentIds 동기화 오류:', error);
+    }
+  }
+
+  // 사용자의 모든 연결 정보 가져오기 (다중)
+  static async getUserConnections(userId: string): Promise<Connection[]> {
+    try {
+      const connections: Connection[] = [];
+      
+      // 부모인 경우
+      const parentQuery = query(
+        collection(db, 'connections'),
+        where('parentId', '==', userId)
+      );
+      const parentSnapshot = await getDocs(parentQuery);
+      parentSnapshot.forEach(doc => {
+        connections.push({ id: doc.id, ...doc.data() } as Connection);
+      });
+      
+      // 돌봄선생님인 경우
+      const careProviderQuery = query(
+        collection(db, 'connections'),
+        where('careProviderId', '==', userId)
+      );
+      const careProviderSnapshot = await getDocs(careProviderQuery);
+      careProviderSnapshot.forEach(doc => {
+        connections.push({ id: doc.id, ...doc.data() } as Connection);
+      });
+      
+      return connections;
+    } catch (error) {
+      console.error('사용자 연결 정보 가져오기 오류:', error);
+      return [];
     }
   }
 
@@ -456,15 +553,14 @@ export class ConnectionService {
   }
 
   // 연결 해제 (다중 연결 지원)
-  static async disconnectUsers(connectionId: string, userId1: string, userId2: string) {
+  static async disconnectUsers(connectionId: string, currentUserId: string, otherUserId: string) {
     try {
       console.log('🔄 연결 해제 시작:', connectionId);
       
-      // 사용자 프로필 가져오기
-      const user1Profile = await AuthService.getUserProfile(userId1);
-      const user2Profile = await AuthService.getUserProfile(userId2);
+      // 현재 사용자 프로필만 가져오기
+      const currentUserProfile = await AuthService.getUserProfile(currentUserId);
       
-      if (!user1Profile || !user2Profile) {
+      if (!currentUserProfile) {
         throw new Error('사용자 프로필을 찾을 수 없습니다.');
       }
       
@@ -474,29 +570,22 @@ export class ConnectionService {
       // 연결 문서 삭제
       batch.delete(doc(db, 'connections', connectionId));
       
-      // 사용자1 프로필에서 connectionId 제거
-      const user1Ref = doc(db, 'users', userId1);
-      const user1ConnectionIds = (user1Profile.connectionIds || []).filter(id => id !== connectionId);
-      const user1NewConnectionId = user1ConnectionIds.length > 0 ? user1ConnectionIds[user1ConnectionIds.length - 1] : null;
-      batch.update(user1Ref, {
-        connectionId: user1NewConnectionId, // 가장 최근 연결로 설정
-        connectionIds: user1ConnectionIds,
-        updatedAt: serverTimestamp()
-      });
-      
-      // 사용자2 프로필에서 connectionId 제거
-      const user2Ref = doc(db, 'users', userId2);
-      const user2ConnectionIds = (user2Profile.connectionIds || []).filter(id => id !== connectionId);
-      const user2NewConnectionId = user2ConnectionIds.length > 0 ? user2ConnectionIds[user2ConnectionIds.length - 1] : null;
-      batch.update(user2Ref, {
-        connectionId: user2NewConnectionId, // 가장 최근 연결로 설정
-        connectionIds: user2ConnectionIds,
+      // 현재 사용자 프로필에서 connectionId 제거
+      const currentUserRef = doc(db, 'users', currentUserId);
+      const currentUserConnectionIds = (currentUserProfile.connectionIds || []).filter(id => id !== connectionId);
+      const currentUserNewConnectionId = currentUserConnectionIds.length > 0 ? currentUserConnectionIds[currentUserConnectionIds.length - 1] : null;
+      batch.update(currentUserRef, {
+        connectionId: currentUserNewConnectionId, // 가장 최근 연결로 설정
+        connectionIds: currentUserConnectionIds,
         updatedAt: serverTimestamp()
       });
       
       // 배치 실행
       await batch.commit();
       console.log('✅ 연결 해제 완료');
+      
+      // 상대방에게 알림을 보내거나 별도의 처리가 필요한 경우 여기에 추가
+      // 상대방은 다음 로그인 시 자동으로 연결 상태를 확인하고 프로필을 업데이트함
       
       return true;
     } catch (error) {

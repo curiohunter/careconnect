@@ -46,6 +46,7 @@ import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { useData } from '../hooks/useData';
 import { DataService } from '../services/dataService';
+import { logger } from '../errorMonitor';
 
 // 시간 옵션 생성 (짧은 버전 - 0~23시)
 const generateShortHourOptions = () => {
@@ -387,6 +388,15 @@ export const WeeklyScheduleTable: React.FC<WeeklyScheduleTableProps> = ({
   const isCareProvider = userType === UserType.CARE_PROVIDER;
   const weekDates = getWeekDates();
   
+  // 디버깅용 로그
+  logger.debug('🔍 WeeklyScheduleTable 렌더링:', {
+    useNewDateBasedSchedule,
+    currentWeekSchedules,
+    currentWeekSchedulesKeys: currentWeekSchedules ? Object.keys(currentWeekSchedules) : [],
+    weekDates: weekDates.map(formatDateLocal),
+    childForSchedule: childForSchedule?.name
+  });
+  
   
   
   // 날짜별 방식일 때의 업데이트 핸들러
@@ -406,8 +416,17 @@ export const WeeklyScheduleTable: React.FC<WeeklyScheduleTableProps> = ({
   // 날짜에서 스케줄 데이터 가져오기
   const getScheduleForDate = (dateString: string, day: DayOfWeek, type: keyof DailyActivities): Activity[] => {
     if (useNewDateBasedSchedule && currentWeekSchedules) {
+      // currentWeekSchedules는 DateRangeSchedules 타입 (날짜별 스케줄 맵)
       const dailySchedule = currentWeekSchedules[dateString];
-      return dailySchedule ? dailySchedule[type] : [];
+      const activities = dailySchedule ? dailySchedule[type] : [];
+      
+      logger.debug(`📅 getScheduleForDate: ${dateString} (${day}) ${type}:`, {
+        dailySchedule,
+        activities,
+        currentWeekSchedulesKeys: Object.keys(currentWeekSchedules)
+      });
+      
+      return activities;
     } else if (schedule) {
       return schedule[day] ? schedule[day][type] : [];
     }

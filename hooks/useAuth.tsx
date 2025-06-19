@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from 'firebase/auth';
 import { AuthService } from '../services/authService';
-import { UserProfile, Connection } from '../types';
+import { UserProfile, Connection, UserType } from '../types';
 import toast from 'react-hot-toast';
+import { logger } from '../errorMonitor';
 
 interface AuthContextType {
   user: User | null;
@@ -39,37 +40,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!profile) return;
     
     try {
-      console.log('🔄 연결 동기화 시작...');
+      logger.info('🔄 연결 동기화 시작...');
       const { ConnectionService } = await import('../services/authService');
       
       // 사용자가 참여한 모든 연결 찾기
       const allUserConnections = await ConnectionService.getAllUserConnections(userId);
-      console.log('📋 발견된 연결:', allUserConnections.length, '개');
+      logger.info('📋 발견된 연결:', allUserConnections.length, '개');
       
-      if (allUserConnections.length > 0) {
-        const connectionIds = allUserConnections.map(conn => conn.id);
-        const currentConnectionIds = profile.connectionIds || [];
+      const connectionIds = allUserConnections.map(conn => conn.id);
+      const currentConnectionIds = profile.connectionIds || [];
+      
+      // 연결이 변경되었는지 확인 (추가 또는 삭제)
+      const hasChanges = 
+        connectionIds.length !== currentConnectionIds.length ||
+        connectionIds.some(id => !currentConnectionIds.includes(id)) ||
+        currentConnectionIds.some(id => !connectionIds.includes(id));
+      
+      if (hasChanges) {
+        logger.info('🔄 연결 상태 변경 감지, 프로필 업데이트 중...');
+        const updateData = {
+          connectionIds: connectionIds,
+          connectionId: connectionIds.length > 0 ? connectionIds[connectionIds.length - 1] : null
+        };
         
-        // 새로운 연결이 있으면 프로필 업데이트
-        const hasNewConnections = connectionIds.some(id => !currentConnectionIds.includes(id));
+        await AuthService.updateUserProfile(userId, updateData);
         
-        if (hasNewConnections) {
-          console.log('🔄 새로운 연결 발견, 프로필 업데이트 중...');
-          await AuthService.updateUserProfile(userId, {
-            connectionIds: connectionIds,
-            connectionId: connectionIds[connectionIds.length - 1] // 가장 최근 연결
-          });
-          
-          // 로컬 상태 업데이트
-          setUserProfile(prev => prev ? {
-            ...prev,
-            connectionIds: connectionIds,
-            connectionId: connectionIds[connectionIds.length - 1]
-          } : null);
-        }
+        // 로컬 상태 업데이트
+        setUserProfile(prev => prev ? {
+          ...prev,
+          ...updateData
+        } : null);
       }
     } catch (error) {
-      console.error('❌ 연결 동기화 오류:', error);
+      logger.error(error as Error, 'useAuth', 'syncUserConnections');
     }
   };
 
@@ -87,8 +90,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           try {
             const conn = await ConnectionService.getConnection(connId);
             if (conn) allConnections.push(conn);
-          } catch (error) {
-            console.error(`연결 ${connId} 로드 실패:`, error);
+          } catch (error: any) {
+            // 권한 오류는 연결이 삭제된 경우이므로 조용히 처리
+            if (error?.code === 'permission-denied') {
+              logger.info(`연결 ${connId}이 삭제되었거나 접근 권한이 없습니다.`);
+            } else {
+              logger.error(error as Error, 'useAuth', `loadConnection-${connId}`);
+            }
           }
         }
       } 
@@ -97,20 +105,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           const conn = await ConnectionService.getConnection(userProfile.connectionId);
           if (conn) allConnections.push(conn);
-        } catch (error) {
-          console.error('연결 로드 실패:', error);
+        } catch (error: any) {
+          // 권한 오류는 연결이 삭제된 경우이므로 조용히 처리
+          if (error?.code === 'permission-denied') {
+            logger.info('연결이 삭제되었거나 접근 권한이 없습니다.');
+          } else {
+            logger.error(error as Error, 'useAuth', 'loadSingleConnection');
+          }
         }
       }
       
       setConnections(allConnections);
       
-      // 활성 연결 설정
-      if (allConnections.length > 0 && !activeConnectionId) {
-        setActiveConnectionId(allConnections[0].id);
-        setConnection(allConnections[0]);
+      // 활성 연결 설정: 메인 연결 우선, 없으면 첫 번째 연결
+      if (allConnections.length > 0) {
+        let selectedConnection = allConnections[0]; // 기본값
+        
+        logger.debug('🔍 초기 연결 선택 디버깅:', {
+          primaryConnectionId: userProfile?.primaryConnectionId,
+          allConnectionIds: allConnections.map(c => c.id),
+          currentActiveConnectionId: activeConnectionId
+        });
+        
+        // 메인 연결이 설정되어 있고 해당 연결이 존재하면 우선 선택
+        if (userProfile?.primaryConnectionId) {
+          const primaryConnection = allConnections.find(conn => conn.id === userProfile.primaryConnectionId);
+          if (primaryConnection) {
+            selectedConnection = primaryConnection;
+            logger.info('✨ 메인 연결로 시작:', primaryConnection.parentProfile?.name);
+          } else {
+            logger.warn('⚠️ 메인 연결이 연결 목록에 없음');
+          }
+        } else {
+          logger.info('ℹ️ 메인 연결이 설정되지 않음, 첫 번째 연결 사용');
+        }
+        
+        // activeConnectionId가 없거나 메인 연결과 다를 경우 업데이트
+        if (!activeConnectionId || activeConnectionId !== selectedConnection.id) {
+          setActiveConnectionId(selectedConnection.id);
+          setConnection(selectedConnection);
+        }
       }
     } catch (error) {
-      console.error('모든 연결 로드 오류:', error);
+      logger.error(error as Error, 'useAuth', 'loadAllConnections');
     }
   };
 
@@ -140,7 +177,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUserProfile(prev => prev ? { ...prev, ...updates } : null);
       toast.success('프로필이 업데이트되었습니다.');
     } catch (error) {
-      console.error('프로필 업데이트 오류:', error);
+      logger.error(error as Error, 'useAuth', 'updateProfile');
       toast.error('프로필 업데이트에 실패했습니다.');
       throw error;
     }
@@ -153,7 +190,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const result = await AuthService.signInWithGoogle();
       return result;
     } catch (error: any) {
-      console.error('Google 로그인 오류:', error);
+      logger.error(error as Error, 'useAuth', 'signInWithGoogle');
       throw error;
     } finally {
       setLoading(false);
@@ -167,7 +204,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUserProfile(profile);
       toast.success('프로필이 생성되었습니다.');
     } catch (error) {
-      console.error('프로필 생성 오류:', error);
+      logger.error(error as Error, 'useAuth', 'createProfile');
       toast.error('프로필 생성에 실패했습니다.');
       throw error;
     }
@@ -184,7 +221,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setActiveConnectionId(null);
       toast.success('로그아웃되었습니다.');
     } catch (error) {
-      console.error('로그아웃 오류:', error);
+      logger.error(error as Error, 'useAuth', 'signOut');
       toast.error('로그아웃에 실패했습니다.');
     }
   };
@@ -192,14 +229,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // 인증 상태 변화 감지
   useEffect(() => {
     const unsubscribe = AuthService.onAuthStateChanged(async (firebaseUser) => {
-      console.log('🔄 AuthStateChanged - firebaseUser:', !!firebaseUser, firebaseUser?.email);
+      logger.info('🔄 AuthStateChanged - firebaseUser:', !!firebaseUser, firebaseUser?.email);
       setLoading(true);
       
       if (firebaseUser) {
         try {
-          console.log('👤 사용자 프로필 로드 중...', firebaseUser.uid);
+          logger.info('👤 사용자 프로필 로드 중...', firebaseUser.uid);
           const profile = await AuthService.getUserProfile(firebaseUser.uid);
-          console.log('📋 프로필 로드 결과:', profile);
+          logger.debug('📋 프로필 로드 결과:', profile);
           
           setUser(firebaseUser);
           setUserProfile(profile);
@@ -209,7 +246,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           
           // 연결 정보 가져오기 - 다중 연결 우선, 단일 연결 호환
           if (profile?.connectionIds && profile.connectionIds.length > 0) {
-            console.log('🔗 다중 연결 정보 로드 중...', profile.connectionIds);
+            logger.info('🔗 다중 연결 정보 로드 중...', profile.connectionIds);
             const { ConnectionService } = await import('../services/authService');
             const allConnections: Connection[] = [];
             
@@ -217,8 +254,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               try {
                 const conn = await ConnectionService.getConnection(connId);
                 if (conn) allConnections.push(conn);
-              } catch (error) {
-                console.error(`연결 ${connId} 로드 실패:`, error);
+              } catch (error: any) {
+                // 권한 오류는 연결이 삭제된 경우이므로 조용히 처리
+                if (error?.code === 'permission-denied') {
+                  logger.info(`연결 ${connId}이 삭제되었거나 접근 권한이 없습니다.`);
+                } else {
+                  logger.error(error as Error, 'useAuth', `authStateChanged-connection-${connId}`);
+                }
               }
             }
             
@@ -227,18 +269,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               setActiveConnectionId(allConnections[0].id);
               setConnection(allConnections[0]);
             }
-            console.log('🔗 다중 연결 로드 완료:', allConnections.length, '개');
+            logger.success('🔗 다중 연결 로드 완료:', allConnections.length, '개');
+            
+            // 돌봄선생님인 경우 allowedParentIds 동기화
+            if (firebaseUser && (profile.userType === UserType.CAREGIVER || profile.userType === '돌봄 선생님' || profile.userType === 'CARE_PROVIDER')) {
+              await ConnectionService.syncAllowedParentIds(firebaseUser.uid);
+            }
           } else if (profile?.connectionId) {
-            console.log('🔗 단일 연결 정보 로드 중...', profile.connectionId);
+            logger.info('🔗 단일 연결 정보 로드 중...', profile.connectionId);
             const { ConnectionService } = await import('../services/authService');
             const connectionData = await ConnectionService.getConnection(profile.connectionId);
-            console.log('🔗 단일 연결 정보 로드 완료:', !!connectionData);
+            logger.success('🔗 단일 연결 정보 로드 완료:', !!connectionData);
             setConnection(connectionData);
             setConnections(connectionData ? [connectionData] : []);
             setActiveConnectionId(connectionData?.id || null);
           }
         } catch (error) {
-          console.error('❌ 사용자 정보 로드 오류:', error);
+          logger.error(error as Error, 'useAuth', 'authStateChanged-userInfo');
           setUser(null);
           setUserProfile(null);
           setConnection(null);
@@ -246,7 +293,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setActiveConnectionId(null);
         }
       } else {
-        console.log('🚪 사용자 로그아웃 상태');
+        logger.info('🚪 사용자 로그아웃 상태');
         setUser(null);
         setUserProfile(null);
         setConnection(null);

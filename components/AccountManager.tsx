@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { AuthService } from '../services/authService';
 import { auth, db } from '../firebase';
-import { deleteUser } from 'firebase/auth';
+import { deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { doc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { Modal } from './Modal';
 import { AlertCircleIcon } from './icons/AlertCircleIcon';
@@ -20,6 +20,8 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ isOpen, onClose 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [needsReauth, setNeedsReauth] = useState(false);
+  const [password, setPassword] = useState('');
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== '계정삭제') {
@@ -35,51 +37,56 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ isOpen, onClose 
       // 1. 연결된 데이터 삭제를 위한 배치 작업 시작
       const batch = writeBatch(db);
 
-      // 2. 사용자의 연결 정보 삭제
+      // 2. 사용자의 연결 정보 삭제 (연결이 있는 경우에만)
       if (userProfile.connectionId) {
-        // 연결 문서 삭제
-        batch.delete(doc(db, 'connections', userProfile.connectionId));
+        try {
+          // 연결 문서 삭제
+          batch.delete(doc(db, 'connections', userProfile.connectionId));
 
-        // 연결과 관련된 모든 하위 데이터 삭제
-        // 일정 삭제
-        const schedulesQuery = query(
-          collection(db, 'schedules'),
-          where('connectionId', '==', userProfile.connectionId)
-        );
-        const schedulesDocs = await getDocs(schedulesQuery);
-        schedulesDocs.forEach(doc => batch.delete(doc.ref));
+          // 연결과 관련된 모든 하위 데이터 삭제
+          // 일정 삭제
+          const schedulesQuery = query(
+            collection(db, 'schedules'),
+            where('connectionId', '==', userProfile.connectionId)
+          );
+          const schedulesDocs = await getDocs(schedulesQuery);
+          schedulesDocs.forEach(doc => batch.delete(doc.ref));
 
-        // 투약 정보 삭제
-        const medicationsQuery = query(
-          collection(db, 'medications'),
-          where('connectionId', '==', userProfile.connectionId)
-        );
-        const medicationsDocs = await getDocs(medicationsQuery);
-        medicationsDocs.forEach(doc => batch.delete(doc.ref));
+          // 투약 정보 삭제
+          const medicationsQuery = query(
+            collection(db, 'medications'),
+            where('connectionId', '==', userProfile.connectionId)
+          );
+          const medicationsDocs = await getDocs(medicationsQuery);
+          medicationsDocs.forEach(doc => batch.delete(doc.ref));
 
-        // 식사 계획 삭제
-        const mealPlansQuery = query(
-          collection(db, 'mealPlans'),
-          where('connectionId', '==', userProfile.connectionId)
-        );
-        const mealPlansDocs = await getDocs(mealPlansQuery);
-        mealPlansDocs.forEach(doc => batch.delete(doc.ref));
+          // 식사 계획 삭제
+          const mealPlansQuery = query(
+            collection(db, 'mealPlans'),
+            where('connectionId', '==', userProfile.connectionId)
+          );
+          const mealPlansDocs = await getDocs(mealPlansQuery);
+          mealPlansDocs.forEach(doc => batch.delete(doc.ref));
 
-        // 특별 일정 삭제
-        const specialSchedulesQuery = query(
-          collection(db, 'specialSchedules'),
-          where('connectionId', '==', userProfile.connectionId)
-        );
-        const specialSchedulesDocs = await getDocs(specialSchedulesQuery);
-        specialSchedulesDocs.forEach(doc => batch.delete(doc.ref));
+          // 특별 일정 삭제
+          const specialSchedulesQuery = query(
+            collection(db, 'specialSchedules'),
+            where('connectionId', '==', userProfile.connectionId)
+          );
+          const specialSchedulesDocs = await getDocs(specialSchedulesQuery);
+          specialSchedulesDocs.forEach(doc => batch.delete(doc.ref));
 
-        // 인수인계 메모 삭제
-        const handoverNotesQuery = query(
-          collection(db, 'handoverNotes'),
-          where('connectionId', '==', userProfile.connectionId)
-        );
-        const handoverNotesDocs = await getDocs(handoverNotesQuery);
-        handoverNotesDocs.forEach(doc => batch.delete(doc.ref));
+          // 인수인계 메모 삭제
+          const handoverNotesQuery = query(
+            collection(db, 'handoverNotes'),
+            where('connectionId', '==', userProfile.connectionId)
+          );
+          const handoverNotesDocs = await getDocs(handoverNotesQuery);
+          handoverNotesDocs.forEach(doc => batch.delete(doc.ref));
+        } catch (connectionError: any) {
+          console.warn('연결 데이터 삭제 중 오류 (계속 진행):', connectionError);
+          // 연결 데이터 삭제 실패해도 계정 삭제는 계속 진행
+        }
       }
 
       // 3. 초대 코드 삭제
@@ -103,9 +110,40 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ isOpen, onClose 
       
       // 재인증이 필요한 경우
       if (error.code === 'auth/requires-recent-login') {
-        toast.error('보안을 위해 재로그인이 필요합니다. 다시 로그인 후 시도해주세요.');
-        await signOut();
-        navigate('/');
+        setNeedsReauth(true);
+        toast.error('보안을 위해 비밀번호를 다시 입력해주세요.');
+      } else {
+        toast.error('계정 삭제에 실패했습니다.');
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleReauthAndDelete = async () => {
+    if (!password.trim()) {
+      toast.error('비밀번호를 입력해주세요.');
+      return;
+    }
+
+    if (!user || !userProfile) return;
+
+    try {
+      setIsDeleting(true);
+      
+      // 재인증
+      const credential = EmailAuthProvider.credential(userProfile.email, password);
+      await reauthenticateWithCredential(user, credential);
+      
+      // 재인증 후 Firebase Auth에서 사용자 삭제
+      await deleteUser(user);
+      
+      toast.success('계정이 완전히 삭제되었습니다.');
+      navigate('/');
+    } catch (error: any) {
+      console.error('재인증 및 삭제 오류:', error);
+      if (error.code === 'auth/wrong-password') {
+        toast.error('비밀번호가 올바르지 않습니다.');
       } else {
         toast.error('계정 삭제에 실패했습니다.');
       }
@@ -153,6 +191,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ isOpen, onClose 
           </div>
         </div>
 
+
         {/* 계정 삭제 */}
         <div className="border-t pt-6">
           <h3 className="font-semibold text-red-600 mb-3">계정 삭제</h3>
@@ -167,23 +206,48 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ isOpen, onClose 
             >
               계정 삭제
             </button>
-          ) : (
+          ) : needsReauth ? (
             <div className="space-y-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <div className="flex items-start">
-                  <AlertCircleIcon className="w-5 h-5 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-red-800">
-                    <p className="font-semibold mb-2">주의사항:</p>
-                    <ul className="list-disc list-inside space-y-1">
-                      <li>모든 일정, 투약 정보, 식사 계획이 삭제됩니다</li>
-                      <li>인수인계 메모가 모두 삭제됩니다</li>
-                      <li>연결된 부모/돌봄 선생님과의 연결이 해제됩니다</li>
-                      <li>이 작업은 되돌릴 수 없습니다</li>
-                    </ul>
-                  </div>
-                </div>
+              <p className="text-sm text-red-600 font-medium">
+                보안을 위해 비밀번호를 다시 입력해주세요.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  비밀번호:
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="비밀번호 입력"
+                />
               </div>
               
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setNeedsReauth(false);
+                    setPassword('');
+                    setShowDeleteConfirm(false);
+                    setDeleteConfirmText('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+                  disabled={isDeleting}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleReauthAndDelete}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+                  disabled={isDeleting || !password.trim()}
+                >
+                  {isDeleting ? '삭제 중...' : '계정 삭제'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   계정을 삭제하려면 <span className="font-bold text-red-600">"계정삭제"</span>를 입력하세요:

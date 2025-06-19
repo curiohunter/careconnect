@@ -3,16 +3,34 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { logger } from './errorMonitor';
 
-// Firebase 설정 - 환경변수 사용으로 보안 강화
+// 필수 환경변수 검증
+const requiredEnvVars = [
+  'VITE_FIREBASE_API_KEY',
+  'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_STORAGE_BUCKET',
+  'VITE_FIREBASE_MESSAGING_SENDER_ID',
+  'VITE_FIREBASE_APP_ID',
+  'VITE_FIREBASE_VAPID_KEY'
+] as const;
+
+for (const envVar of requiredEnvVars) {
+  if (!import.meta.env[envVar]) {
+    throw new Error(`필수 환경변수 ${envVar}가 설정되지 않았습니다. .env 파일을 확인해주세요.`);
+  }
+}
+
+// Firebase 설정 - 환경변수만 사용 (보안 강화)
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBM9c0Ik-UmH-696jDEToifiodRQ_evZ1M",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "careconnect-444da.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "careconnect-444da",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "careconnect-444da.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "546857093781",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:546857093781:web:e1bad981e034a4b21aa99c",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-MJ1HPK498V"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Firebase 앱 초기화
@@ -39,7 +57,7 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   try {
     messaging = getMessaging(app);
   } catch (error) {
-    console.log('FCM 초기화 실패:', error);
+    logger.error(error as Error, 'firebase', 'initializeMessaging');
   }
 }
 
@@ -50,15 +68,26 @@ export const requestFCMToken = async () => {
   if (!messaging) return null;
   
   try {
+    const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+    
+    // VAPID 키 유효성 검사
+    if (!vapidKey || vapidKey === 'PLACEHOLDER_VAPID_KEY') {
+      logger.warn('VAPID 키가 설정되지 않았습니다. Firebase Console에서 Web Push certificates를 생성하고 환경변수에 설정해주세요.');
+      logger.warn('1. Firebase Console > Project Settings > Cloud Messaging');
+      logger.warn('2. Web Push certificates > Generate key pair');
+      logger.warn('3. 생성된 키를 VITE_FIREBASE_VAPID_KEY 환경변수에 설정');
+      return null;
+    }
+    
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       const token = await getToken(messaging, {
-        vapidKey: 'your-vapid-key'
+        vapidKey: vapidKey
       });
       return token;
     }
   } catch (error) {
-    console.error('FCM 토큰 요청 실패:', error);
+    logger.error(error as Error, 'firebase', 'requestFCMToken');
   }
   return null;
 };

@@ -28,6 +28,7 @@ import {
   DailyHandoverNote
 } from '../types';
 import toast from 'react-hot-toast';
+import { logger } from '../errorMonitor';
 
 export const useData = () => {
   const { connection, connections, userProfile, user } = useAuth();
@@ -67,6 +68,10 @@ export const useData = () => {
         
         // Connection에서 아이 정보 직접 사용
         const childrenData = connection.children || [];
+        logger.info('🔍 useData 아이 정보 로드:', {
+          connectionId,
+          childrenFromConnection: childrenData.map(c => ({ id: c.id, name: c.name }))
+        });
         
         // 특별 일정 로드 함수 (부모는 모든 연결 통합)
         const loadSpecialItemsForUser = async () => {
@@ -83,7 +88,7 @@ export const useData = () => {
                   : await DataService.getSpecialScheduleItemsByParentId(parentId);
                 allItems.push(...items);
               } catch (error) {
-                console.error(`연결 ${conn.id}의 특별 일정 로드 실패:`, error);
+                logger.error(error as Error, 'useData', `loadSpecialItems-${conn.id}`);
               }
             }
             
@@ -127,7 +132,7 @@ export const useData = () => {
         }
         
         // 새로운 날짜별 스케줄 초기 로드 (parentId 기반 우선 시도)
-        console.log('📅 새로운 날짜별 스케줄 초기 로드 시작');
+        logger.info('📅 새로운 날짜별 스케줄 초기 로드 시작');
         if (childrenData.length > 0) {
           const weekRange = DataService.getCurrentWeekRange();
           const schedules: ChildDateSchedules = {};
@@ -139,7 +144,7 @@ export const useData = () => {
               try {
                 // parentId 기반 로드 시도 (마이그레이션 후)
                 let childSchedules;
-                console.log(`📊 ${child.name} 스케줄 로드 시작 - connectionId: ${connectionId}, parentId: ${parentId}`);
+                logger.info(`📊 ${child.name} 스케줄 로드 시작 - connectionId: ${connectionId}, parentId: ${parentId}`);
                 
                 if (parentId && userProfile?.userType === UserType.PARENT) {
                   try {
@@ -148,12 +153,12 @@ export const useData = () => {
                       child.id, 
                       weekRange
                     );
-                    console.log(`✅ ${child.name} 스케줄 (parentId 기반) 로드 완료:`, Object.keys(childSchedules).length, '날짜');
+                    logger.success(`✅ ${child.name} 스케줄 (parentId 기반) 로드 완료:`, Object.keys(childSchedules).length, '날짜');
                   } catch (parentError) {
-                    console.log(`⚠️ ${child.name} parentId 기반 로드 실패, connectionId로 fallback:`, parentError);
+                    logger.warn(`⚠️ ${child.name} parentId 기반 로드 실패, connectionId로 fallback:`, parentError);
                     // No fallback - parentId is required
                     childSchedules = {};
-                    console.log(`✅ ${child.name} 스케줄 (connectionId fallback) 로드 완료:`, Object.keys(childSchedules).length, '날짜');
+                    logger.debug(`✅ ${child.name} 스케줄 (connectionId fallback) 로드 완료:`, Object.keys(childSchedules).length, '날짜');
                   }
                 } else {
                   // parentId가 없거나 돌봄선생님인 경우 connectionId 기반 사용
@@ -167,25 +172,25 @@ export const useData = () => {
                   } else {
                     childSchedules = {}; // No fallback available
                   }
-                  console.log(`✅ ${child.name} 스케줄 (connectionId 기반) 로드 완료:`, Object.keys(childSchedules).length, '날짜');
+                  logger.success(`✅ ${child.name} 스케줄 (connectionId 기반) 로드 완료:`, Object.keys(childSchedules).length, '날짜');
                 }
                 
-                console.log(`📋 ${child.name} 스케줄 데이터:`, childSchedules);
+                logger.debug(`📋 ${child.name} 스케줄 데이터:`, childSchedules);
                 
                 schedules[child.id] = childSchedules;
               } catch (error) {
-                console.error(`❌ ${child.name} 스케줄 로드 실패:`, error);
+                logger.error(error as Error, 'useData', `loadSchedules-${child.name}`);
                 schedules[child.id] = {}; // 빈 스케줄로 설정
               }
             })
           );
           
           setCurrentWeekSchedules(schedules);
-          console.log('🎉 모든 아이들의 스케줄 로드 완료');
+          logger.success('🎉 모든 아이들의 스케줄 로드 완료');
         }
 
       } catch (error) {
-        console.error('데이터 로드 오류:', error);
+        logger.error(error as Error, 'useData', 'loadData');
         toast.error('데이터를 불러오는데 실패했습니다.');
       } finally {
         setLoading(false);
@@ -201,7 +206,7 @@ export const useData = () => {
     if (!parentId) return;
 
     const unsubscribes: (() => void)[] = [];
-    console.log(`🔔 parentId 기반 실시간 구독 시작: ${parentId}`);
+    logger.info(`🔔 parentId 기반 실시간 구독 시작: ${parentId}`);
 
     // 식사 계획 실시간 구독 (deprecated - will be replaced by date-based meal plans)
     // const unsubscribeMealPlan = DataService.onMealPlanChange(parentId, (plan) => {
@@ -227,7 +232,7 @@ export const useData = () => {
 
     // 일일 인수인계 메모 구독 (parentId 기반)
     if (DataService.onDailyHandoverNotesChangeByParentId) {
-      console.log(`🔔 parentId 기반 인수인계 메모 실시간 구독: ${parentId}`);
+      logger.info(`🔔 parentId 기반 인수인계 메모 실시간 구독: ${parentId}`);
       const unsubscribeDailyHandoverNotes = DataService.onDailyHandoverNotesChangeByParentId(parentId, (notes: DailyHandoverNote[]) => {
         setDailyHandoverNotes(Array.isArray(notes) ? notes : []);
       });
@@ -263,7 +268,7 @@ export const useData = () => {
       setChildren(childrenData);
       toast.success('아이 정보가 저장되었습니다.');
     } catch (error) {
-      console.error('아이 정보 저장 오류:', error);
+      logger.error(error as Error, 'useData', 'saveChildren');
       toast.error('아이 정보 저장에 실패했습니다.');
       throw error;
     }
@@ -282,7 +287,7 @@ export const useData = () => {
       await DataService.saveMealPlan(connectionId, updatedMealPlan);
       // 실시간 구독으로 상태는 자동 업데이트됨
     } catch (error) {
-      console.error('식사 계획 업데이트 오류:', error);
+      logger.error(error as Error, 'useData', 'updateMealPlan');
       toast.error('식사 계획 업데이트에 실패했습니다.');
       throw error;
     }
@@ -297,26 +302,26 @@ export const useData = () => {
     try {
       const weekRange = DataService.getCurrentWeekRange();
       const parentId = connection.parentId;
-      console.log('🍽️ loadCurrentWeekMealPlans 시작:', { connectionId, parentId, weekRange });
+      logger.info('🍽️ loadCurrentWeekMealPlans 시작:', { connectionId, parentId, weekRange });
       
       let mealPlans;
-      if (parentId && userProfile?.userType === UserType.PARENT) {
+      if (parentId) {
         try {
           mealPlans = await DataService.getDateRangeMealPlansByParentId(parentId, weekRange);
-          console.log('🍽️ 현재 주 식사 계획 (parentId 기반) 로딩 완료:', mealPlans);
+          logger.success('🍽️ 현재 주 식사 계획 (parentId 기뱅) 로딩 완료:', mealPlans);
         } catch (parentError) {
-          console.log('⚠️ parentId 기반 식사 계획 로드 실패, connectionId로 fallback:', parentError);
+          logger.warn('⚠️ parentId 기반 식사 계획 로드 실패, connectionId로 fallback:', parentError);
           mealPlans = await DataService.getDateRangeMealPlans(connectionId, weekRange);
-          console.log('🍽️ 현재 주 식사 계획 (connectionId 기반) 로딩 완료:', mealPlans);
+          logger.success('🍽️ 현재 주 식사 계획 (connectionId 기뱅) 로딩 완룼:', mealPlans);
         }
       } else {
         mealPlans = await DataService.getDateRangeMealPlans(connectionId, weekRange);
-        console.log('🍽️ 현재 주 식사 계획 (connectionId 기반) 로딩 완료:', mealPlans);
+        logger.success('🍽️ 현재 주 식사 계획 (connectionId 기뱅) 로딩 완룼:', mealPlans);
       }
       
       setCurrentWeekMealPlans(mealPlans);
     } catch (error) {
-      console.error('현재 주 식사 계획 로드 오류:', error);
+      logger.error(error as Error, 'useData', 'loadCurrentWeekMealPlans');
       toast.error('식사 계획을 불러오는데 실패했습니다.');
     }
   }, [connectionId, connection?.parentId]);
@@ -331,15 +336,15 @@ export const useData = () => {
       if (parentId) {
         try {
           await DataService.saveDateBasedMealPlanByParentId(parentId, date, mealPlan);
-          console.log('✅ 식사 계획 (parentId 기반) 저장 완료');
+          logger.success('✅ 식사 계획 (parentId 기반) 저장 완료');
         } catch (parentError) {
-          console.log('⚠️ parentId 기반 저장 실패, connectionId로 fallback');
+          logger.warn('⚠️ parentId 기반 저장 실패, connectionId로 fallback');
           await DataService.saveDateBasedMealPlan(connectionId, date, mealPlan);
-          console.log('✅ 식사 계획 (connectionId 기반) 저장 완료');
+          logger.debug('✅ 식사 계획 (connectionId 기반) 저장 완료');
         }
       } else {
         await DataService.saveDateBasedMealPlan(connectionId, date, mealPlan);
-        console.log('✅ 식사 계획 (connectionId 기반) 저장 완료');
+        logger.debug('✅ 식사 계획 (connectionId 기반) 저장 완료');
       }
       
       // 로컬 상태 업데이트
@@ -350,7 +355,7 @@ export const useData = () => {
       
       toast.success('식사 계획이 업데이트되었습니다.');
     } catch (error) {
-      console.error('날짜별 식사 계획 업데이트 오류:', error);
+      logger.error(error as Error, 'useData', 'updateDateBasedMealPlan');
       toast.error('식사 계획 업데이트에 실패했습니다.');
       throw error;
     }
@@ -361,7 +366,7 @@ export const useData = () => {
     if (!connectionId) return false;
 
     try {
-      console.log('🔍 식사 계획 마이그레이션 상태 확인 중...');
+      logger.debug('🔍 식사 계획 마이그레이션 상태 확인 중...');
       
       // 1. 현재 주 날짜 기반 식사 계획 확인
       const weekRange = DataService.getCurrentWeekRange();
@@ -371,21 +376,21 @@ export const useData = () => {
       // 2. 기존 요일 기반 식사 계획 확인
       const hasWeeklyData = mealPlan && Object.values(mealPlan).some(meal => meal?.menu);
       
-      console.log('📊 마이그레이션 상태:', { hasDateBasedData, hasWeeklyData });
+      logger.debug('📊 마이그레이션 상태:', { hasDateBasedData, hasWeeklyData });
       
       // 3. 마이그레이션 필요성 판단
       if (hasDateBasedData) {
-        console.log('✅ 이미 날짜 기반 데이터가 존재함 - 마이그레이션 불필요');
+        logger.debug('✅ 이미 날짜 기반 데이터가 존재함 - 마이그레이션 불필요');
         return true; // 이미 날짜 기반 데이터 존재
       }
       
       if (!hasWeeklyData) {
-        console.log('ℹ️ 마이그레이션할 요일 기반 데이터가 없음');
+        logger.debug('ℹ️ 마이그레이션할 요일 기반 데이터가 없음');
         return false; // 마이그레이션할 데이터 없음
       }
       
       // 4. 자동 마이그레이션 실행
-      console.log('🚀 자동 마이그레이션 시작...');
+      logger.debug('🚀 자동 마이그레이션 시작...');
       
       // 날짜 배열 생성 (generateWeekDates 함수 대신 직접 구현)
       const dates: string[] = [];
@@ -413,14 +418,14 @@ export const useData = () => {
           
           await DataService.saveDateBasedMealPlan(connectionId, date, dateMealPlan);
           migratedCount++;
-          console.log(`✅ ${dayOfWeek} → ${date} 마이그레이션 완료: ${dayMeal.menu}`);
+          logger.debug(`✅ ${dayOfWeek} → ${date} 마이그레이션 완료: ${dayMeal.menu}`);
         }
       });
       
       await Promise.all(migrationPromises);
       
       if (migratedCount > 0) {
-        console.log(`🎉 마이그레이션 완료: ${migratedCount}개 항목 변환`);
+        logger.debug(`🎉 마이그레이션 완료: ${migratedCount}개 항목 변환`);
         await loadCurrentWeekMealPlans(); // 새로운 데이터 로드
         return true;
       }
@@ -428,7 +433,7 @@ export const useData = () => {
       return false;
       
     } catch (error) {
-      console.error('❌ 자동 마이그레이션 실패:', error);
+      logger.error(error as Error, 'useData', 'checkAndMigrateMealPlan');
       toast.error('식사 계획 업그레이드 중 문제가 발생했습니다.');
       return false;
     }
@@ -443,11 +448,11 @@ export const useData = () => {
     }
 
     try {
-      console.log(`💊 parentId 기반 투약 정보 추가: ${parentId}`);
+      logger.debug(`💊 parentId 기반 투약 정보 추가: ${parentId}`);
       await DataService.addMedicationByParentId(parentId, { ...medication, administered: false });
       toast.success('투약 정보가 추가되었습니다.');
     } catch (error) {
-      console.error('투약 정보 추가 오류:', error);
+      logger.error(error as Error, 'useData', 'addMedication');
       toast.error('투약 정보 추가에 실패했습니다.');
       throw error;
     }
@@ -458,7 +463,7 @@ export const useData = () => {
       await DataService.updateMedication(medicationId, updates);
       toast.success('투약 정보가 수정되었습니다.');
     } catch (error) {
-      console.error('투약 정보 수정 오류:', error);
+      logger.error(error as Error, 'useData', 'updateMedication');
       toast.error('투약 정보 수정에 실패했습니다.');
       throw error;
     }
@@ -469,7 +474,7 @@ export const useData = () => {
       await DataService.deleteMedication(medicationId);
       toast.success('투약 정보가 삭제되었습니다.');
     } catch (error) {
-      console.error('투약 정보 삭제 오류:', error);
+      logger.error(error as Error, 'useData', 'deleteMedication');
       toast.error('투약 정보 삭제에 실패했습니다.');
       throw error;
     }
@@ -483,7 +488,7 @@ export const useData = () => {
       await DataService.updateMedication(medicationId, { administered: !medication.administered });
       toast.success(medication.administered ? '투약 미완료로 변경되었습니다.' : '투약 완료되었습니다.');
     } catch (error) {
-      console.error('투약 상태 변경 오류:', error);
+      logger.error(error as Error, 'useData', 'toggleMedicationAdministered');
       toast.error('투약 상태 변경에 실패했습니다.');
       throw error;
     }
@@ -498,7 +503,7 @@ export const useData = () => {
     }
 
     try {
-      console.log(`📝 parentId 기반 특별 일정 추가: ${parentId}`);
+      logger.debug(`📝 parentId 기반 특별 일정 추가: ${parentId}`);
       // 권한 기반 추가 함수 사용
       await DataService.addSpecialScheduleItemWithPermissionByParentId(
         parentId, 
@@ -508,7 +513,7 @@ export const useData = () => {
       );
       toast.success('요청이 등록되었습니다.');
     } catch (error) {
-      console.error('특별 일정 추가 오류:', error);
+      logger.error(error as Error, 'useData', 'addSpecialScheduleItem');
       toast.error('요청 등록에 실패했습니다.');
       throw error;
     }
@@ -519,7 +524,7 @@ export const useData = () => {
       await DataService.updateSpecialScheduleItem(itemId, updates);
       toast.success('요청이 수정되었습니다.');
     } catch (error) {
-      console.error('특별 일정 수정 오류:', error);
+      logger.error(error as Error, 'useData', 'updateSpecialScheduleItem');
       toast.error('요청 수정에 실패했습니다.');
       throw error;
     }
@@ -530,7 +535,7 @@ export const useData = () => {
       await DataService.deleteSpecialScheduleItem(itemId);
       toast.success('요청이 삭제되었습니다.');
     } catch (error) {
-      console.error('특별 일정 삭제 오류:', error);
+      logger.error(error as Error, 'useData', 'deleteSpecialScheduleItem');
       toast.error('요청 삭제에 실패했습니다.');
       throw error;
     }
@@ -544,7 +549,7 @@ export const useData = () => {
       await DataService.saveWorkSchedule(user.uid, schedule);
       toast.success('근무 일정이 저장되었습니다.');
     } catch (error) {
-      console.error('근무 일정 저장 오류:', error);
+      logger.error(error as Error, 'useData', 'updateWorkSchedule');
       toast.error('근무 일정 저장에 실패했습니다.');
       throw error;
     }
@@ -558,27 +563,48 @@ export const useData = () => {
 
     try {
       const weekRange = DataService.getCurrentWeekRange();
-      console.log('📅 loadCurrentWeekSchedules 시작:', { connectionId, children: connection.children.length, weekRange });
+      logger.debug('📅 loadCurrentWeekSchedules 시작:', { connectionId, children: connection.children.length, weekRange });
       const schedules: ChildDateSchedules = {};
       
       // 모든 아이들의 현재 주 스케줄을 병렬로 로드
       await Promise.all(
         connection.children.map(async (child) => {
-          console.log(`👶 ${child.name} (${child.id}) 스케줄 로딩 시작`);
-          const childSchedules = await DataService.getDateRangeSchedules(
-            connectionId, 
-            child.id, 
-            weekRange
-          );
-          console.log(`👶 ${child.name} (${child.id}) 스케줄 로딩 완료:`, childSchedules);
+          logger.debug(`👶 ${child.name} (${child.id}) 스케줄 로딩 시작`);
+          // parentId 기반 우선 시도, connectionId fallback
+          let childSchedules = {};
+          const parentId = connection.parentId;
+          if (parentId) {
+            try {
+              childSchedules = await DataService.getDateRangeSchedules(
+                parentId,
+                child.id,
+                weekRange
+              );
+              logger.debug(`👶 ${child.name} parentId 기반 스케줄 로드 완룼:`, Object.keys(childSchedules).length, '날짜');
+            } catch (error) {
+              logger.debug(`👶 ${child.name} parentId 기반 로드 실패, connectionId로 fallback`);
+              childSchedules = await DataService.getDateRangeSchedules(
+                connectionId, 
+                child.id, 
+                weekRange
+              );
+            }
+          } else {
+            childSchedules = await DataService.getDateRangeSchedules(
+              connectionId, 
+              child.id, 
+              weekRange
+            );
+          }
+          logger.debug(`👶 ${child.name} (${child.id}) 스케줄 로딩 완룼:`, childSchedules);
           schedules[child.id] = childSchedules;
         })
       );
       
-      console.log('📅 전체 스케줄 로딩 완료:', schedules);
+      logger.debug('📅 전체 스케줄 로딩 완료:', schedules);
       setCurrentWeekSchedules(schedules);
     } catch (error) {
-      console.error('현재 주 스케줄 로드 오류:', error);
+      logger.error(error as Error, 'useData', 'loadCurrentWeekSchedules');
       toast.error('스케줄을 불러오는데 실패했습니다.');
     }
   }, [connectionId, connection?.children]);
@@ -610,10 +636,10 @@ export const useData = () => {
       // parentId 기반 저장 시도 (부모인 경우)
       const parentId = connection?.parentId;
       if (parentId && userProfile?.userType === UserType.PARENT) {
-        console.log(`💾 parentId 기반 스케줄 저장: ${parentId}/${childId}/${date}`);
+        logger.debug(`💾 parentId 기반 스케줄 저장: ${parentId}/${childId}/${date}`);
         await DataService.saveDailyScheduleByParentId(parentId, childId, updatedSchedule);
       } else {
-        console.log(`💾 connectionId 기반 스케줄 저장: ${connectionId}/${childId}/${date}`);
+        logger.debug(`💾 connectionId 기반 스케줄 저장: ${connectionId}/${childId}/${date}`);
         await DataService.saveDailySchedule(connectionId, childId, updatedSchedule);
       }
       
@@ -627,7 +653,7 @@ export const useData = () => {
       }));
       
     } catch (error) {
-      console.error('날짜별 스케줄 업데이트 오류:', error);
+      logger.error(error as Error, 'useData', 'updateDailySchedule');
       toast.error('스케줄 업데이트에 실패했습니다.');
       throw error;
     }
@@ -654,7 +680,7 @@ export const useData = () => {
       
       toast.success('모든 날짜가 성공적으로 업데이트되었습니다!');
     } catch (error) {
-      console.error('일괄 업데이트 오류:', error);
+      logger.error(error as Error, 'useData', 'updateMultipleDays');
       toast.error('일괄 업데이트에 실패했습니다.');
       throw error;
     }
@@ -699,11 +725,11 @@ export const useData = () => {
       
       if (migrationUpdates.length > 0) {
         await updateMultipleDays(childId, migrationUpdates);
-        console.log(`✅ ${childId} 마이그레이션 완료`);
+        logger.debug(`✅ ${childId} 마이그레이션 완료`);
       }
       
     } catch (error) {
-      console.error('마이그레이션 오류:', error);
+      logger.error(error as Error, 'useData', 'migrateWeeklyToDaily');
       toast.error('마이그레이션에 실패했습니다.');
     }
   }, [connectionId, currentWeekSchedules, updateMultipleDays]);
@@ -751,13 +777,13 @@ export const useData = () => {
             return;
           }
         } catch (error) {
-          console.log('⚠️ parentId 기반 실시간 구독 실패, connectionId로 fallback');
+          logger.debug('⚠️ parentId 기반 실시간 구독 실패, connectionId로 fallback');
         }
       }
       
       // connectionId 기반 구독 (fallback)
       const unsubscribe = DataService.onDateRangeSchedulesChange(
-        connectionId,
+        parentId || connectionId,
         child.id,
         weekRange,
         (schedules) => {
@@ -797,13 +823,13 @@ export const useData = () => {
           return () => unsubscribe?.();
         }
       } catch (error: unknown) {
-        console.log('⚠️ parentId 기반 식사 계획 실시간 구독 실패, connectionId로 fallback', error);
+        logger.debug('⚠️ parentId 기반 식사 계획 실시간 구독 실패, connectionId로 fallback', error);
       }
     }
     
     // connectionId 기반 구독 (fallback)
     unsubscribe = DataService.onDateBasedMealPlansChange?.(
-      connectionId,
+      parentId || connectionId,
       weekRange,
       (mealPlans: DateRangeMealPlan) => {
         setCurrentWeekMealPlans(mealPlans);
@@ -821,14 +847,14 @@ export const useData = () => {
     if (!parentId) return;
 
     try {
-      console.log(`🔄 parentId 기반 반복 템플릿 로드: ${parentId}/${childId}`);
+      logger.debug(`🔄 parentId 기반 반복 템플릿 로드: ${parentId}/${childId}`);
       const templates = await DataService.getRecurringTemplatesByParentId(parentId, childId);
       setRecurringTemplates(prev => ({
         ...prev,
         [childId]: templates
       }));
     } catch (error) {
-      console.error('반복 일정 템플릿 로드 오류:', error);
+      logger.error(error as Error, 'useData', `loadRecurringTemplates-${childId}`);
       // 오류가 발생해도 빈 배열로 설정하여 앱이 지속되도록 함
       setRecurringTemplates(prev => ({
         ...prev,
@@ -836,7 +862,7 @@ export const useData = () => {
       }));
       // 사용자에게 인덱스 준비 메시지 표시
       if (error.message && error.message.includes('index')) {
-        console.log('템플릿 인덱스가 아직 준비 중입니다. 잠시 후 다시 시도해주세요.');
+        logger.debug('템플릿 인덱스가 아직 준비 중입니다. 잠시 후 다시 시도해주세요.');
       } else {
         toast.error('템플릿을 불러오는데 실패했습니다.');
       }
@@ -852,13 +878,13 @@ export const useData = () => {
     }
 
     try {
-      console.log(`💾 parentId 기반 반복 템플릿 저장: ${parentId}`);
+      logger.debug(`💾 parentId 기반 반복 템플릿 저장: ${parentId}`);
       await DataService.saveRecurringTemplateByParentId(parentId, template);
       // 해당 아이의 템플릿 목록 다시 로드
       await loadRecurringTemplates(template.childId);
       toast.success('템플릿이 저장되었습니다.');
     } catch (error) {
-      console.error('반복 일정 템플릿 저장 오류:', error);
+      logger.error(error as Error, 'useData', 'saveRecurringTemplate');
       toast.error('템플릿 저장에 실패했습니다.');
       throw error;
     }
@@ -872,7 +898,7 @@ export const useData = () => {
       await loadRecurringTemplates(childId);
       toast.success('템플릿이 삭제되었습니다.');
     } catch (error) {
-      console.error('반복 일정 템플릿 삭제 오류:', error);
+      logger.error(error as Error, 'useData', 'deleteRecurringTemplate');
       toast.error('템플릿 삭제에 실패했습니다.');
       throw error;
     }
@@ -886,7 +912,7 @@ export const useData = () => {
       await loadRecurringTemplates(template.childId);
       toast.success('템플릿이 수정되었습니다.');
     } catch (error) {
-      console.error('반복 일정 템플릿 수정 오류:', error);
+      logger.error(error as Error, 'useData', 'updateRecurringTemplate');
       toast.error('템플릿 수정에 실패했습니다.');
       throw error;
     }
@@ -918,17 +944,17 @@ export const useData = () => {
       // parentId 기반 템플릿 적용 시도 (부모인 경우)
       const parentId = connection?.parentId;
       if (parentId && userProfile?.userType === UserType.PARENT) {
-        console.log(`🔄 parentId 기반 템플릿 적용: ${parentId}/${childId}`);
+        logger.debug(`🔄 parentId 기반 템플릿 적용: ${parentId}/${childId}`);
         await DataService.applyRecurringTemplateByParentId(parentId, childId, { ...template, isWeeklyRecurring });
       } else {
-        console.log(`🔄 connectionId 기반 템플릿 적용: ${connectionId}/${childId}`);
+        logger.debug(`🔄 connectionId 기반 템플릿 적용: ${connectionId}/${childId}`);
         await DataService.applyRecurringTemplate(connectionId, childId, { ...template, isWeeklyRecurring });
       }
       // 현재 주 스케줄 다시 로드
       await loadCurrentWeekSchedules();
       toast.success(`템플릿이 적용되었습니다.${isWeeklyRecurring ? ' (매주 자동 적용 설정됨)' : ''}`);
     } catch (error) {
-      console.error('반복 일정 템플릿 적용 오류:', error);
+      logger.error(error as Error, 'useData', 'applyRecurringTemplate');
       toast.error('템플릿 적용에 실패했습니다.');
       throw error;
     }
@@ -950,7 +976,7 @@ export const useData = () => {
 
       if (!isWeekendAutoApplyTime) return;
 
-      console.log('🔄 매주 반복 템플릿 자동 적용 체크 시작');
+      logger.debug('🔄 매주 반복 템플릿 자동 적용 체크 시작');
 
       try {
         for (const child of connection.children) {
@@ -958,7 +984,7 @@ export const useData = () => {
           const weeklyTemplates = templates.filter(t => t.isWeeklyRecurring && t.isActive);
 
           if (weeklyTemplates.length > 0) {
-            console.log(`📅 ${child.name}의 매주 반복 템플릿 ${weeklyTemplates.length}개 발견`);
+            logger.debug(`📅 ${child.name}의 매주 반복 템플릿 ${weeklyTemplates.length}개 발견`);
             
             for (const template of weeklyTemplates) {
               try {
@@ -982,19 +1008,19 @@ export const useData = () => {
                 });
 
                 if (!hasExistingSchedule) {
-                  console.log(`🔄 ${child.name}의 "${template.name}" 템플릿을 다음주에 자동 적용`);
+                  logger.debug(`🔄 ${child.name}의 "${template.name}" 템플릿을 다음주에 자동 적용`);
                   await DataService.applyRecurringTemplateToWeek(connectionId, child.id, template, nextWeekRange);
                 } else {
-                  console.log(`⏭️ ${child.name}의 "${template.name}" 템플릿은 이미 다음주에 적용됨`);
+                  logger.debug(`⏭️ ${child.name}의 "${template.name}" 템플릿은 이미 다음주에 적용됨`);
                 }
               } catch (error) {
-                console.error(`❌ ${child.name}의 "${template.name}" 템플릿 자동 적용 실패:`, error);
+                logger.error(error as Error, 'useData', `weeklyRecurringTemplate-${child.name}-${template.name}`);
               }
             }
           }
         }
       } catch (error) {
-        console.error('매주 반복 템플릿 자동 적용 체크 오류:', error);
+        logger.error(error as Error, 'useData', 'weeklyRecurringTemplatesCheck');
       }
     };
 
@@ -1021,7 +1047,7 @@ export const useData = () => {
       }
       toast.success('중복 데이터가 정리되었습니다.');
     } catch (error) {
-      console.error('중복 데이터 정리 오류:', error);
+      logger.error(error as Error, 'useData', 'cleanupDuplicateActivities');
       toast.error('중복 데이터 정리에 실패했습니다.');
     }
   }, [connectionId, loadCurrentWeekSchedules]);
@@ -1035,7 +1061,7 @@ export const useData = () => {
       toast.success('다대다 연결이 생성되었습니다.');
       return id;
     } catch (error) {
-      console.error('다대다 연결 생성 오류:', error);
+      logger.error(error as Error, 'useData', 'createMultiConnection');
       toast.error('다대다 연결 생성에 실패했습니다.');
       throw error;
     }
@@ -1046,7 +1072,7 @@ export const useData = () => {
       await DataService.updateMultiConnection(connectionId, updates);
       toast.success('다대다 연결이 업데이트되었습니다.');
     } catch (error) {
-      console.error('다대다 연결 업데이트 오류:', error);
+      logger.error(error as Error, 'useData', 'updateMultiConnection');
       toast.error('다대다 연결 업데이트에 실패했습니다.');
       throw error;
     }
@@ -1059,7 +1085,7 @@ export const useData = () => {
       toast.success('돌봄 선생님이 할당되었습니다.');
       return id;
     } catch (error) {
-      console.error('돌봄 선생님 할당 오류:', error);
+      logger.error(error as Error, 'useData', 'createCareProviderAssignment');
       toast.error('돌봄 선생님 할당에 실패했습니다.');
       throw error;
     }
@@ -1070,7 +1096,7 @@ export const useData = () => {
       await DataService.updateCareProviderAssignment(assignmentId, updates);
       toast.success('돌봄 선생님 할당이 업데이트되었습니다.');
     } catch (error) {
-      console.error('돌봄 선생님 할당 업데이트 오류:', error);
+      logger.error(error as Error, 'useData', 'updateCareProviderAssignment');
       toast.error('돌봄 선생님 할당 업데이트에 실패했습니다.');
       throw error;
     }
@@ -1081,7 +1107,7 @@ export const useData = () => {
       await DataService.deleteCareProviderAssignment(assignmentId);
       toast.success('돌봄 선생님 할당이 삭제되었습니다.');
     } catch (error) {
-      console.error('돌봄 선생님 할당 삭제 오류:', error);
+      logger.error(error as Error, 'useData', 'deleteCareProviderAssignment');
       toast.error('돌봄 선생님 할당 삭제에 실패했습니다.');
       throw error;
     }
@@ -1095,7 +1121,7 @@ export const useData = () => {
       const patterns = await DataService.getSchedulePatterns(user.uid);
       setSchedulePatterns(patterns);
     } catch (error) {
-      console.error('스케줄 패턴 로드 오류:', error);
+      logger.error(error as Error, 'useData', 'loadSchedulePatterns');
       toast.error('스케줄 패턴을 불러오는데 실패했습니다.');
     }
   }, [user?.uid]);
@@ -1107,7 +1133,7 @@ export const useData = () => {
       toast.success('스케줄 패턴이 생성되었습니다.');
       return id;
     } catch (error) {
-      console.error('스케줄 패턴 생성 오류:', error);
+      logger.error(error as Error, 'useData', 'createSchedulePattern');
       toast.error('스케줄 패턴 생성에 실패했습니다.');
       throw error;
     }
@@ -1119,7 +1145,7 @@ export const useData = () => {
       await loadSchedulePatterns();
       toast.success('스케줄 패턴이 업데이트되었습니다.');
     } catch (error) {
-      console.error('스케줄 패턴 업데이트 오류:', error);
+      logger.error(error as Error, 'useData', 'updateSchedulePattern');
       toast.error('스케줄 패턴 업데이트에 실패했습니다.');
       throw error;
     }
@@ -1131,7 +1157,7 @@ export const useData = () => {
       await loadSchedulePatterns();
       toast.success('스케줄 패턴이 삭제되었습니다.');
     } catch (error) {
-      console.error('스케줄 패턴 삭제 오류:', error);
+      logger.error(error as Error, 'useData', 'deleteSchedulePattern');
       toast.error('스케줄 패턴 삭제에 실패했습니다.');
       throw error;
     }
@@ -1146,12 +1172,12 @@ export const useData = () => {
     }
 
     try {
-      console.log(`💾 parentId 기반 인수인계 메모 생성: ${parentId}`);
+      logger.debug(`💾 parentId 기반 인수인계 메모 생성: ${parentId}`);
       const id = await DataService.saveDailyHandoverNoteByParentId(parentId, note);
       toast.success('인수인계 메모가 생성되었습니다.');
       return id;
     } catch (error) {
-      console.error('인수인계 메모 생성 오류:', error);
+      logger.error(error as Error, 'useData', 'createDailyHandoverNote');
       toast.error('인수인계 메모 생성에 실패했습니다.');
       throw error;
     }
@@ -1165,11 +1191,11 @@ export const useData = () => {
     }
 
     try {
-      console.log(`✏️ parentId 기반 인수인계 메모 수정: ${parentId}/${noteId}`);
+      logger.debug(`✏️ parentId 기반 인수인계 메모 수정: ${parentId}/${noteId}`);
       await DataService.updateDailyHandoverNoteByParentId(parentId, noteId, updates);
       toast.success('인수인계 메모가 수정되었습니다.');
     } catch (error) {
-      console.error('인수인계 메모 수정 오류:', error);
+      logger.error(error as Error, 'useData', 'updateDailyHandoverNote');
       toast.error('인수인계 메모 수정에 실패했습니다.');
       throw error;
     }
@@ -1183,11 +1209,11 @@ export const useData = () => {
     }
 
     try {
-      console.log(`🗑️ parentId 기반 인수인계 메모 삭제: ${parentId}/${noteId}`);
+      logger.debug(`🗑️ parentId 기반 인수인계 메모 삭제: ${parentId}/${noteId}`);
       await DataService.deleteDailyHandoverNoteByParentId(parentId, noteId);
       toast.success('인수인계 메모가 삭제되었습니다.');
     } catch (error) {
-      console.error('인수인계 메모 삭제 오류:', error);
+      logger.error(error as Error, 'useData', 'deleteDailyHandoverNote');
       toast.error('인수인계 메모 삭제에 실패했습니다.');
       throw error;
     }
@@ -1198,12 +1224,12 @@ export const useData = () => {
     if (!parentId) return [];
     
     try {
-      console.log(`🔍 parentId 기반 인수인계 메모 조회: ${parentId}`);
+      logger.debug(`🔍 parentId 기반 인수인계 메모 조회: ${parentId}`);
       const allNotes = await DataService.getDailyHandoverNotesByParentId(parentId);
       // 요일별 필터링은 클라이언트에서 처리
       return (allNotes || []).filter(note => note.dayOfWeek === dayOfWeek);
     } catch (error) {
-      console.error('요일별 인수인계 메모 검색 오류:', error);
+      logger.error(error as Error, 'useData', 'searchHandoverNotesByDay');
       toast.error('요일별 인수인계 메모 검색에 실패했습니다.');
       return [];
     }
@@ -1215,12 +1241,12 @@ export const useData = () => {
     
     try {
       const today = new Date().toISOString().split('T')[0];
-      console.log(`📅 parentId 기반 당일 인수인계 메모 조회: ${parentId} (${today})`);
+      logger.debug(`📅 parentId 기반 당일 인수인계 메모 조회: ${parentId} (${today})`);
       const allNotes = await DataService.getDailyHandoverNotesByParentId(parentId);
       // 날짜별 필터링은 클라이언트에서 처리
       return (allNotes || []).filter(note => note.date === today);
     } catch (error) {
-      console.error('당일 인수인계 메모 조회 오류:', error);
+      logger.error(error as Error, 'useData', 'getTodayHandoverNotes');
       toast.error('당일 인수인계 메모 조회에 실패했습니다.');
       return [];
     }

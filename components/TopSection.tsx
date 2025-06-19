@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { WeeklyScheduleTable } from './WeeklyScheduleTable';
 import { useData } from '../hooks/useData';
+import { logger } from '../errorMonitor';
 
 interface TopSectionProps {
   activeChildId: string | null;
@@ -36,6 +37,11 @@ export const TopSection: React.FC<TopSectionProps> = ({
   let currentWeekData: DateRangeSchedules | undefined;
   if (useNewDateBasedSchedule && activeChildId) {
     currentWeekData = currentWeekSchedules[activeChildId];
+    logger.debug('🔍 TopSection 데이터 매핑:', {
+      activeChildId,
+      currentWeekSchedulesKeys: Object.keys(currentWeekSchedules),
+      currentWeekData: currentWeekData ? Object.keys(currentWeekData) : 'undefined'
+    });
   }
 
   if (childrenInfo.length > 0 && !activeChildId) {

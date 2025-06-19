@@ -16,11 +16,12 @@ import { DailyHandoverNotes } from './DailyHandoverNotes';
 import { LogoutIcon } from './icons/LogoutIcon';
 import { SettingsIcon } from './icons/SettingsIcon';
 import ConnectionSelector from './ConnectionSelector';
+import { logger } from '../errorMonitor';
 
 export const Dashboard: React.FC = () => {
-  const { user, userProfile, connection, connections, signOut } = useAuth();
+  const { user, userProfile, connection, connections, activeConnectionId, switchConnection, signOut } = useAuth();
   const {
-    children,
+    children: allChildren,
     mealPlan,
     medications,
     specialScheduleItems,
@@ -63,14 +64,39 @@ export const Dashboard: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // 활성 아이 설정
+
+  // 현재 활성 연결의 아이들만 필터링
+  const children = connection?.children || [];
+  
+
+  // 메인 연결 확인 및 전환
   useEffect(() => {
-    if (children.length > 0 && !activeChildId) {
-      setActiveChildId(children[0].id);
-    } else if (children.length === 0) {
+    // 메인 연결이 설정되어 있고, 현재 활성 연결과 다르면 메인 연결로 전환
+    if (userProfile?.primaryConnectionId && 
+        connections.length > 0 && 
+        activeConnectionId !== userProfile.primaryConnectionId) {
+      
+      const primaryConnection = connections.find(conn => conn.id === userProfile.primaryConnectionId);
+      if (primaryConnection) {
+        logger.info('🔄 Dashboard에서 메인 연결로 전환:', primaryConnection.parentProfile?.name);
+        switchConnection(userProfile.primaryConnectionId);
+        return; // 연결 전환 중이므로 다른 로직 실행하지 않음
+      }
+    }
+  }, [userProfile?.primaryConnectionId, connections, activeConnectionId, switchConnection]);
+
+  // 활성 아이 설정 - 연결이 바뀔 때마다 강제로 리셋
+  useEffect(() => {
+    
+    if (children.length > 0) {
+      const firstChildId = children[0].id;
+      if (activeChildId !== firstChildId) {
+        setActiveChildId(firstChildId);
+      }
+    } else {
       setActiveChildId(null);
     }
-  }, [children, activeChildId]);
+  }, [connection?.id, children]); // connection.id도 dependency에 추가
 
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
@@ -94,7 +120,7 @@ export const Dashboard: React.FC = () => {
   // 새로운 날짜별 스케줄 초기 로드
   useEffect(() => {
     if (connection && children.length > 0 && loadCurrentWeekSchedules) {
-      console.log('📅 현재 주 스케줄 초기 로드 시작');
+      logger.info('📅 현재 주 스케줄 초기 로드 시작');
       loadCurrentWeekSchedules();
     }
   }, [connection, children, loadCurrentWeekSchedules]);
@@ -102,7 +128,7 @@ export const Dashboard: React.FC = () => {
   // 새로운 날짜별 식사 계획 초기 로드
   useEffect(() => {
     if (connection && loadCurrentWeekMealPlans) {
-      console.log('🍽️ 현재 주 식사 계획 초기 로드 시작');
+      logger.info('🍽️ 현재 주 식사 계획 초기 로드 시작');
       loadCurrentWeekMealPlans();
     }
   }, [connection, loadCurrentWeekMealPlans]);
@@ -205,6 +231,11 @@ export const Dashboard: React.FC = () => {
         <InviteCodeManager 
           isOpen={showInviteCodeManager}
           onClose={() => setShowInviteCodeManager(false)}
+        />
+
+        <AccountManager 
+          isOpen={showAccountManager}
+          onClose={() => setShowAccountManager(false)}
         />
       </div>
     );
@@ -387,7 +418,7 @@ export const Dashboard: React.FC = () => {
             onEditModeChange={setEditingMealPlan}
             onExitEdit={() => setEditingMealPlan(false)}
             medications={medications}
-            childrenInfo={children}
+            childrenInfo={allChildren}
             userType={userProfile?.userType || UserType.PARENT}
             onOpenModal={openModal}
             onToggleMedicationAdministered={toggleMedicationAdministered}
@@ -428,7 +459,7 @@ export const Dashboard: React.FC = () => {
         <Modal isOpen={true} onClose={closeModal} title="새 투약 정보 추가">
           <AddMedicationForm 
             onSubmit={handleAddOrUpdateMedication} 
-            childrenInfo={children}
+            childrenInfo={allChildren}
             onClose={closeModal}
           />
         </Modal>
@@ -543,7 +574,7 @@ export const Dashboard: React.FC = () => {
           onClose={() => setShowTemplateManager(false)}
           childId={activeChildId}
           childName={children.find(c => c.id === activeChildId)?.name || '아이'}
-          allChildren={children.map(child => ({ id: child.id, name: child.name }))}
+          allChildren={allChildren.map(child => ({ id: child.id, name: child.name }))}
           allTemplates={recurringTemplates}
           onSaveTemplate={saveRecurringTemplate}
           onUpdateTemplate={(templateId, template) => updateRecurringTemplate(templateId, template)}

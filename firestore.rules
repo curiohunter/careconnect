@@ -25,16 +25,27 @@ service cloud.firestore {
       return request.auth.uid == parentId;
     }
     
-    // 돌보선생님이 parentId에 접근 가능한지 확인 (연결을 통해)
-    // 이 함수는 성능상 비효율적이지만 현재로서는 최선의 방법
+    // 돌봄선생님이 parentId에 접근 가능한지 확인 (연결을 통해)
+    // 현재 사용자(돌봄선생님)가 해당 parentId와 연결되어 있는지 확인
     function hasCaregiverAccessToParent(parentId) {
-      // 범용적인 연결 확인 - 사용자가 돌보선생님인 모든 연결을 확인
-      return true; // 임시로 모든 인증된 사용자에게 접근 허용 (보안 개선 필요)
+      // 연결 컬렉션에서 parentId가 일치하고 현재 사용자가 careProviderId인 연결이 존재하는지 확인
+      // 이는 쿼리 제한으로 인해 직접적인 검색이 어려우므로 제한적 구현
+      // 실제로는 애플리케이션 레벨에서 connectionId를 명시적으로 제공하는 것이 권장됨
+      return request.auth != null && 
+        (resource.data.connectionId != null && 
+         exists(/databases/$(database)/documents/connections/$(resource.data.connectionId)) &&
+         get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.parentId == parentId &&
+         get(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data.careProviderId == request.auth.uid);
     }
     
-    // 통합 parentId 접근 권한 (부모 본인 또는 연결된 돌보선생님)
+    // 통합 parentId 접근 권한 (부모 본인 또는 연결된 돌봄선생님)
     function hasParentIdDataAccess(parentId) {
-      return hasParentIdAccess(parentId) || hasCaregiverAccessToParent(parentId);
+      // 부모 본인인 경우
+      return hasParentIdAccess(parentId) || 
+        // 돌봄선생님인 경우 - users에 저장된 allowedParentIds 확인
+        (request.auth != null && 
+         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         parentId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.allowedParentIds);
     }
     
     // 다대다 연결 권한 확인
@@ -75,7 +86,7 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && 
         request.resource.data.createdBy == request.auth.uid;
-      allow update: if isAuthenticated();
+      allow update, delete: if isAuthenticated();
     }
     
     // 연결 정보 규칙 - 강화된 보안
@@ -83,7 +94,13 @@ service cloud.firestore {
       allow read: if isAuthenticated() && 
         (resource.data.parentId == request.auth.uid || 
          resource.data.careProviderId == request.auth.uid);
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        // 필수 필드 검증
+        request.resource.data.parentId is string &&
+        request.resource.data.careProviderId is string &&
+        request.resource.data.children is list &&
+        (request.resource.data.parentId == request.auth.uid || 
+         request.resource.data.careProviderId == request.auth.uid);
       allow update, delete: if isAuthenticated() && 
         (resource.data.parentId == request.auth.uid || 
          resource.data.careProviderId == request.auth.uid);
@@ -175,8 +192,16 @@ service cloud.firestore {
            hasParentIdDataAccess(resource.data.parentId))
         );
       
-      // 생성 규칙 - connectionId 또는 parentId 기반 생성 지원
+      // 생성 규칙 - connectionId 또는 parentId 기반 생성 지원 + 데이터 유효성 검사
       allow create: if request.auth != null && 
+        // 필수 필드 검증
+        request.resource.data.childId is string &&
+        request.resource.data.symptoms is string &&
+        request.resource.data.medicationTypes is list &&
+        request.resource.data.medicationTypes.size() > 0 &&
+        request.resource.data.date is string &&
+        request.resource.data.createdBy is string &&
+        request.resource.data.createdBy == request.auth.uid &&
         (
           // connectionId 기반 생성 (기존 방식)
           (request.resource.data.connectionId is string &&
@@ -217,8 +242,14 @@ service cloud.firestore {
            hasParentIdDataAccess(resource.data.parentId))
         );
       
-      // 생성 규칙 - connectionId 또는 parentId 기반 생성 지원
+      // 생성 규칙 - connectionId 또는 parentId 기반 생성 지원 + 데이터 유효성 검사
       allow create: if request.auth != null && 
+        // 필수 필드 검증
+        request.resource.data.type is string &&
+        request.resource.data.title is string &&
+        request.resource.data.date is string &&
+        request.resource.data.createdBy is string &&
+        request.resource.data.createdBy == request.auth.uid &&
         (
           // connectionId 기반 생성 (기존 방식)
           (request.resource.data.connectionId is string &&
