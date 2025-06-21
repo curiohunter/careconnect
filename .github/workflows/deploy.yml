@@ -42,7 +42,6 @@ jobs:
       
       - name: Deploy to Firebase
         run: |
-          firebase use careconnect-444da
-          firebase deploy --only hosting,firestore:rules,firestore:indexes
+          firebase deploy --only hosting,firestore:rules,firestore:indexes --token "$FIREBASE_TOKEN"
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
