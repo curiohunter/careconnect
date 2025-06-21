@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
-import { UserType, Permission, CareProviderAssignment } from '../types';
+import { Permission } from '../types';
 
 interface ProviderSwitcherProps {
   providers: Array<{

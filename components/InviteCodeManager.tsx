@@ -11,7 +11,7 @@ interface InviteCodeManagerProps {
 }
 
 export const InviteCodeManager: React.FC<InviteCodeManagerProps> = ({ isOpen, onClose }) => {
-  const { userProfile, user, updateProfile, connection, connections, refreshConnection } = useAuth();
+  const { userProfile, user, connection, connections, refreshConnection } = useAuth();
   const [inviteCode, setInviteCode] = useState<string>('');
   const [inputCode, setInputCode] = useState<string>('');
   const [loading, setLoading] = useState(false);

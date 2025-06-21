@@ -29,7 +29,6 @@ export const MiddleSection: React.FC<MiddleSectionProps> = ({
   currentWeekMealPlans,
   onUpdateDateBasedMealPlan,
   onEditModeChange,
-  onExitEdit,
   
   // 공통 props
   medications,
