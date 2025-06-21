@@ -46,13 +46,13 @@ jobs:
       - name: Deploy to Firebase
         run: |
           echo "Starting Firebase deployment..."
-          firebase deploy --only hosting --token "$FIREBASE_TOKEN" --non-interactive
+          firebase deploy --only hosting --token "$FIREBASE_TOKEN" --project careconnect-444da --non-interactive
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
       
       - name: Deploy Firebase Rules and Indexes  
         run: |
           echo "Deploying Firestore rules and indexes..."
-          firebase deploy --only firestore:rules,firestore:indexes --token "$FIREBASE_TOKEN" --non-interactive
+          firebase deploy --only firestore:rules,firestore:indexes --token "$FIREBASE_TOKEN" --project careconnect-444da --non-interactive
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
