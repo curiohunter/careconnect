@@ -36,5 +36,23 @@
 <body class="bg-lightgray">
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
+  <script>
+    // 기존 Service Worker 완전 제거
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for(let registration of registrations) {
+          registration.unregister();
+        }
+      });
+    }
+    // 캐시 완전 삭제
+    if ('caches' in window) {
+      caches.keys().then(function(names) {
+        for (let name of names) {
+          caches.delete(name);
+        }
+      });
+    }
+  </script>
 </body>
 </html>
