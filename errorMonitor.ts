@@ -210,7 +210,7 @@ export const withErrorBoundary = function<P extends object>(
       return { hasError: true, error };
     }
 
-    componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    componentDidCatch(error: Error) {
       logError(error, 'react_component', Component.name);
     }
 

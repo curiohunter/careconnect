@@ -1,12 +1,10 @@
 import React from 'react';
 import { 
-  DayOfWeek, 
   Activity, 
   ChildInfo, 
   UserType, 
   DailyActivities, 
   // 새로운 날짜별 타입들
-  ChildDateSchedules,
   DateRangeSchedules
 } from '../types';
 import { WeeklyScheduleTable } from './WeeklyScheduleTable';
@@ -20,7 +18,6 @@ interface TopSectionProps {
   isEditing: boolean;
   userType: UserType;
   useNewDateBasedSchedule?: boolean;
-  onExitEdit?: () => void;
 }
 
 export const TopSection: React.FC<TopSectionProps> = ({
@@ -29,10 +26,9 @@ export const TopSection: React.FC<TopSectionProps> = ({
   onActiveChildChange,
   isEditing,
   userType,
-  useNewDateBasedSchedule = true,
-  onExitEdit
+  useNewDateBasedSchedule = true
 }) => {
-  const { currentWeekSchedules, updateDailySchedule, cleanupDuplicateActivities } = useData();
+  const { currentWeekSchedules, updateDailySchedule } = useData();
 
   let currentWeekData: DateRangeSchedules | undefined;
   if (useNewDateBasedSchedule && activeChildId) {

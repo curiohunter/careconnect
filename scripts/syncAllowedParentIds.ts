@@ -1,6 +1,5 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, doc, setDoc, serverTimestamp, where, query } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
 
 // Firebase 설정
 const firebaseConfig = {
@@ -15,7 +14,6 @@ const firebaseConfig = {
 // Firebase 초기화
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
 
 async function syncAllowedParentIds() {
   try {

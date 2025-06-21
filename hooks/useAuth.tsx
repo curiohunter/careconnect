@@ -272,7 +272,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             logger.success('🔗 다중 연결 로드 완료:', allConnections.length, '개');
             
             // 돌봄선생님인 경우 allowedParentIds 동기화
-            if (firebaseUser && (profile.userType === UserType.CAREGIVER || profile.userType === '돌봄 선생님' || profile.userType === 'CARE_PROVIDER')) {
+            if (firebaseUser && profile.userType === UserType.CARE_PROVIDER) {
               await ConnectionService.syncAllowedParentIds(firebaseUser.uid);
             }
           } else if (profile?.connectionId) {

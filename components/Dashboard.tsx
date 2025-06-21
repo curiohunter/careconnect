@@ -400,7 +400,6 @@ export const Dashboard: React.FC = () => {
             isEditing={userProfile?.userType === UserType.PARENT ? editingSchedule : false}
             userType={userProfile?.userType || UserType.PARENT}
             useNewDateBasedSchedule={true}
-            onExitEdit={() => setEditingSchedule(false)}
           />
         </div>
 

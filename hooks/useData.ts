@@ -14,15 +14,11 @@ import {
   UserType,
   // 새로운 날짜별 타입들
   DailySchedule,
-  DateRangeSchedules,
   ChildDateSchedules,
-  DateRange,
-  WeekRange,
   DailyMealPlanNew,
   DateRangeMealPlan,
   // 다대다 관계 타입 시스템
   MultiConnection,
-  Permission,
   CareProviderAssignment,
   SchedulePattern,
   DailyHandoverNote
@@ -49,7 +45,7 @@ export const useData = () => {
   
   // 다대다 관계 타입 시스템 상태
   const [multiConnections, setMultiConnections] = useState<MultiConnection[]>([]);
-  const [careProviderAssignments, setCareProviderAssignments] = useState<CareProviderAssignment[]>([]);
+  const [careProviderAssignments] = useState<CareProviderAssignment[]>([]);
   const [schedulePatterns, setSchedulePatterns] = useState<SchedulePattern[]>([]);
   const [dailyHandoverNotes, setDailyHandoverNotes] = useState<DailyHandoverNote[]>([]);
 
@@ -264,7 +260,7 @@ export const useData = () => {
     if (!connectionId) return;
 
     try {
-      await DataService.saveChildren(connectionId, childrenData);
+      await DataService.saveChildren();
       setChildren(childrenData);
       toast.success('아이 정보가 저장되었습니다.');
     } catch (error) {
@@ -274,24 +270,19 @@ export const useData = () => {
     }
   }, [connectionId]);
 
-  // 식사 계획 업데이트
-  const updateMealPlan = useCallback(async (day: DayOfWeek, menu: string, notes: string) => {
+  // 식사 계획 업데이트 (deprecated)
+  const updateMealPlan = useCallback(async () => {
     if (!connectionId) return;
 
     try {
-      const updatedMealPlan = {
-        ...mealPlan,
-        [day]: { menu, notes }
-      };
-
-      await DataService.saveMealPlan(connectionId, updatedMealPlan);
+      await DataService.saveMealPlan();
       // 실시간 구독으로 상태는 자동 업데이트됨
     } catch (error) {
       logger.error(error as Error, 'useData', 'updateMealPlan');
       toast.error('식사 계획 업데이트에 실패했습니다.');
       throw error;
     }
-  }, [connectionId, mealPlan]);
+  }, [connectionId]);
 
   // ===== 새로운 날짜 기반 식사 계획 관리 =====
   
@@ -854,14 +845,15 @@ export const useData = () => {
         [childId]: templates
       }));
     } catch (error) {
-      logger.error(error as Error, 'useData', `loadRecurringTemplates-${childId}`);
+      const errorObj = error as Error;
+      logger.error(errorObj, 'useData', `loadRecurringTemplates-${childId}`);
       // 오류가 발생해도 빈 배열로 설정하여 앱이 지속되도록 함
       setRecurringTemplates(prev => ({
         ...prev,
         [childId]: []
       }));
       // 사용자에게 인덱스 준비 메시지 표시
-      if (error.message && error.message.includes('index')) {
+      if (errorObj.message && errorObj.message.includes('index')) {
         logger.debug('템플릿 인덱스가 아직 준비 중입니다. 잠시 후 다시 시도해주세요.');
       } else {
         toast.error('템플릿을 불러오는데 실패했습니다.');
@@ -1000,9 +992,9 @@ export const useData = () => {
                 const hasExistingSchedule = template.daysOfWeek.some(dayOfWeek => {
                   const dateString = DataService.getDateStringForDayOfWeek(nextWeekRange.weekStart, dayOfWeek);
                   const daySchedule = existingSchedules[dateString];
-                  return daySchedule?.childcareActivities?.some(activity => 
+                  return daySchedule?.childcareActivities?.some((activity: Activity) => 
                     activity.description === template.name
-                  ) || daySchedule?.afterSchoolActivities?.some(activity => 
+                  ) || daySchedule?.afterSchoolActivities?.some((activity: Activity) => 
                     activity.description === template.name
                   );
                 });
@@ -1164,7 +1156,7 @@ export const useData = () => {
   }, [loadSchedulePatterns]);
 
   // 일일 인수인계 메모 관리
-  const createDailyHandoverNote = useCallback(async (note: Omit<DailyHandoverNote, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const createDailyHandoverNote = useCallback(async (noteData: Omit<DailyHandoverNote, 'id' | 'createdAt' | 'updatedAt'>) => {
     const parentId = connection?.parentId;
     if (!parentId) {
       toast.error('연결 정보를 찾을 수 없습니다.');
@@ -1173,6 +1165,7 @@ export const useData = () => {
 
     try {
       logger.debug(`💾 parentId 기반 인수인계 메모 생성: ${parentId}`);
+      const note = { ...noteData, createdAt: new Date() };
       const id = await DataService.saveDailyHandoverNoteByParentId(parentId, note);
       toast.success('인수인계 메모가 생성되었습니다.');
       return id;

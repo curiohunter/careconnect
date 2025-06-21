@@ -97,9 +97,9 @@ export const ChildrenManager: React.FC<ChildrenManagerProps> = ({ isOpen, onClos
           updatedAt: new Date()
         });
         
-        // 2. DataService의 children 컬렉션에도 저장
-        const { default: DataService } = await import('../services/dataService');
-        await DataService.saveChildren(connection.id, validChildren);
+        // 2. DataService의 children 컬렉션에도 저장 (deprecated function)
+        const { DataService } = await import('../services/dataService');
+        await DataService.saveChildren();
       }
       
       toast.success('아이 정보가 저장되었습니다.');

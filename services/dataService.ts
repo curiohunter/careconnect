@@ -23,6 +23,8 @@ import {
   DayOfWeek,
   Activity,
   RecurringActivity,
+  ChildInfo,
+  DailyMealPlan,
   // 새로운 날짜별 타입들
   DailySchedule,
   DateRangeSchedules,
@@ -43,44 +45,44 @@ export class DataService {
   // These functions provide backward compatibility for components still using connectionId
   
   // Children management wrappers
-  static async saveChildren(connectionId: string, children: ChildInfo[]) {
+  static async saveChildren() {
     logger.warn('saveChildren with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('saveChildren with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
-  static async getChildren(connectionId: string): Promise<ChildInfo[]> {
+  static async getChildren(): Promise<ChildInfo[]> {
     logger.warn('getChildren with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('getChildren with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   // Meal plan wrappers
-  static async getMealPlan(connectionId: string): Promise<DailyMealPlan | null> {
+  static async getMealPlan(): Promise<DailyMealPlan | null> {
     logger.warn('getMealPlan with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('getMealPlan with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
-  static async saveMealPlan(connectionId: string, mealPlan: DailyMealPlan) {
+  static async saveMealPlan() {
     logger.warn('saveMealPlan with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('saveMealPlan with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
-  static onMealPlanChange(connectionId: string, callback: (mealPlan: DailyMealPlan | null) => void): Unsubscribe {
+  static onMealPlanChange(): Unsubscribe {
     logger.warn('onMealPlanChange with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('onMealPlanChange with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
   // Medication wrappers
-  static async addMedication(connectionId: string, medication: Omit<Medication, 'id'>) {
+  static async addMedication() {
     logger.warn('addMedication with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('addMedication with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
-  static async getMedications(connectionId: string): Promise<Medication[]> {
+  static async getMedications(): Promise<Medication[]> {
     logger.warn('getMedications with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('getMedications with connectionId is deprecated. Please update to use parentId-based functions.');
   }
 
-  static onMedicationsChange(connectionId: string, callback: (medications: Medication[]) => void): Unsubscribe {
+  static onMedicationsChange(): Unsubscribe {
     logger.warn('onMedicationsChange with connectionId is deprecated. Use parentId-based functions.');
     throw new Error('onMedicationsChange with connectionId is deprecated. Please update to use parentId-based functions.');
   }
@@ -1079,8 +1081,6 @@ export class DataService {
         
         if (template.daysOfWeek.includes(dayOfWeek)) {
           const dateString = DataService.formatDate(currentDate);
-          
-          const activityType = template.activityType === 'childcare' ? 'childcareActivities' : 'afterSchoolActivities';
           
           // 새 활동 생성
           const newActivity: Activity = {

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { WorkSchedule, DayOfWeek, WorkShift, UserType } from '../types';
+import { WorkSchedule, DayOfWeek, UserType } from '../types';
 import { DAYS_OF_WEEK } from '../constants';
 import { useData } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
-import toast from 'react-hot-toast';
 
 interface WorkScheduleSettingsProps {
   isOpen: boolean;

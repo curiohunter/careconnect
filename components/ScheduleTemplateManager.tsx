@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RecurringActivity, DayOfWeek, InstitutionType } from '../types';
+import { RecurringActivity, DayOfWeek } from '../types';
 import { Modal } from './Modal';
 import { generateHourOptions, generateMinuteOptions } from '../constants';
 
@@ -29,7 +29,6 @@ interface TemplateFormData {
   institutionName?: string;
 }
 
-const INSTITUTION_TYPES: InstitutionType[] = ['어린이집', '유치원', '학교', '해당없음', '기타'];
 const ALL_DAYS = Object.values(DayOfWeek);
 const HOUR_OPTIONS = generateHourOptions();
 const MINUTE_OPTIONS = generateMinuteOptions(5); // 5분 간격
@@ -60,7 +59,6 @@ export const ScheduleTemplateManager: React.FC<ScheduleTemplateManagerProps> = (
   const [showForm, setShowForm] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [weeklyRecurringStates, setWeeklyRecurringStates] = useState<{[templateId: string]: boolean}>({});
-  const [localTemplates, setLocalTemplates] = useState<{[childId: string]: RecurringActivity[]}>({});
   const [formData, setFormData] = useState<TemplateFormData>({
     name: '',
     activityType: 'childcare',

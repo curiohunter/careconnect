@@ -6,10 +6,9 @@ import {
   UserType, 
   ChildInfo,
   // 새로운 날짜별 타입들
-  DailySchedule,
   DateRangeSchedules
 } from '../types';
-import { DAYS_OF_WEEK, generateHourOptions, generateMinuteOptions } from '../constants';
+import { DAYS_OF_WEEK } from '../constants';
 // 요일과 날짜 표시 함수
 const formatDayWithDate = (dayName: string, date: Date): string => {
   const month = date.getMonth() + 1;
@@ -44,8 +43,6 @@ const formatDateLocal = (date: Date): string => {
 
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
-import { useData } from '../hooks/useData';
-import { DataService } from '../services/dataService';
 import { logger } from '../errorMonitor';
 
 // 시간 옵션 생성 (짧은 버전 - 0~23시)
@@ -238,8 +235,6 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
 
 interface ActivityCellProps {
   activities: Activity[];
-  day: DayOfWeek;
-  type: keyof DailyActivities;
   isEditing: boolean;
   onUpdateActivities: (newActivities: Activity[]) => void;
   isCareProvider: boolean;
@@ -249,8 +244,6 @@ interface ActivityCellProps {
 
 const ActivityCell: React.FC<ActivityCellProps> = ({ 
     activities, 
-    day, 
-    type, 
     isEditing, 
     onUpdateActivities, 
     isCareProvider, 
@@ -304,9 +297,6 @@ const ActivityCell: React.FC<ActivityCellProps> = ({
     setLocalActivities(updatedActivities);
     onUpdateActivities(updatedActivities);
   };
-
-  // 주말 여부 확인
-  const isWeekend = day === DayOfWeek.SATURDAY || day === DayOfWeek.SUNDAY;
 
   if (isEditing && !isCareProvider) {
     let currentActivities = [...localActivities];
@@ -458,8 +448,6 @@ export const WeeklyScheduleTable: React.FC<WeeklyScheduleTableProps> = ({
                 <td className="px-4 py-3 align-top">
                    <ActivityCell 
                       activities={getScheduleForDate(dateString, day, 'childcareActivities')} 
-                      day={day} 
-                      type="childcareActivities" 
                       isEditing={isEditing} 
                       onUpdateActivities={(newActivities) => {
                         if (useNewDateBasedSchedule) {
@@ -476,8 +464,6 @@ export const WeeklyScheduleTable: React.FC<WeeklyScheduleTableProps> = ({
                 <td className="px-4 py-3 align-top">
                   <ActivityCell 
                       activities={getScheduleForDate(dateString, day, 'afterSchoolActivities')} 
-                      day={day} 
-                      type="afterSchoolActivities" 
                       isEditing={isEditing} 
                       onUpdateActivities={(newActivities) => {
                         if (useNewDateBasedSchedule) {

@@ -1,6 +1,5 @@
 import {
   signInWithPopup,
-  signInWithRedirect,
   getRedirectResult,
   signOut,
   onAuthStateChanged,
@@ -17,10 +16,7 @@ import {
   getDocs,
   addDoc,
   serverTimestamp,
-  onSnapshot,
-  deleteDoc,
-  writeBatch,
-  runTransaction
+  writeBatch
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import { UserProfile, InviteCode, Connection, UserType } from '../types';
@@ -204,7 +200,7 @@ export class InviteCodeService {
       
       const inviteData = inviteDoc.data() as InviteCode;
       const now = new Date();
-      const expiresAt = inviteData.expiresAt.toDate ? inviteData.expiresAt.toDate() : new Date(inviteData.expiresAt);
+      const expiresAt = inviteData.expiresAt instanceof Date ? inviteData.expiresAt : (inviteData.expiresAt as any).toDate ? (inviteData.expiresAt as any).toDate() : new Date(inviteData.expiresAt);
       
       return {
         exists: true,
@@ -236,7 +232,7 @@ export class InviteCodeService {
       
       // 유효성 검사
       const now = new Date();
-      const expiresAt = inviteData.expiresAt.toDate ? inviteData.expiresAt.toDate() : new Date(inviteData.expiresAt);
+      const expiresAt = inviteData.expiresAt instanceof Date ? inviteData.expiresAt : (inviteData.expiresAt as any).toDate ? (inviteData.expiresAt as any).toDate() : new Date(inviteData.expiresAt);
       console.log('⏰ 현재 시간:', now);
       console.log('⏰ 만료 시간 (변환됨):', expiresAt);
       console.log('🔄 사용 여부:', inviteData.isUsed);
@@ -436,7 +432,7 @@ export class ConnectionService {
   static async syncAllowedParentIds(userId: string) {
     try {
       const userProfile = await AuthService.getUserProfile(userId);
-      if (!userProfile || (userProfile.userType !== UserType.CAREGIVER && userProfile.userType !== '돌봄 선생님' && userProfile.userType !== 'CARE_PROVIDER')) {
+      if (!userProfile || userProfile.userType !== UserType.CARE_PROVIDER) {
         return; // 돌봄선생님이 아니면 스킵
       }
 
@@ -553,7 +549,7 @@ export class ConnectionService {
   }
 
   // 연결 해제 (다중 연결 지원)
-  static async disconnectUsers(connectionId: string, currentUserId: string, otherUserId: string) {
+  static async disconnectUsers(connectionId: string, currentUserId: string) {
     try {
       console.log('🔄 연결 해제 시작:', connectionId);
       

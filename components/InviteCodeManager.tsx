@@ -65,8 +65,7 @@ export const InviteCodeManager: React.FC<InviteCodeManagerProps> = ({ isOpen, on
     try {
       setDisconnecting(true);
       
-      const otherUserId = connection.parentId === user.uid ? connection.careProviderId : connection.parentId;
-      await ConnectionService.disconnectUsers(connection.id, user.uid, otherUserId);
+      await ConnectionService.disconnectUsers(connection.id, user.uid);
       
       toast.success('연결이 해제되었습니다.');
       

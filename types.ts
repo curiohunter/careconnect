@@ -67,7 +67,7 @@ export interface UserProfile {
   name: string;
   contact: string;
   email?: string;
-  connectionId?: string; // 연결된 상대방의 사용자 ID (단일 연결 - 하위 호환성)
+  connectionId?: string | null; // 연결된 상대방의 사용자 ID (단일 연결 - 하위 호환성)
   connectionIds?: string[]; // 다중 연결 ID 목록 (새로운 필드)
   primaryConnectionId?: string; // 메인 연결 ID (돌봄선생님용)
   inviteCode?: string; // 자신의 초대 코드
