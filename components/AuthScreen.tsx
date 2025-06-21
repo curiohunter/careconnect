@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { UserType, UserProfile, ChildInfo, Gender, InstitutionType } from '../types';
+import { UserType, ChildInfo, Gender, InstitutionType } from '../types';
 import { USER_TYPES, GENDER_OPTIONS, INSTITUTION_TYPE_OPTIONS } from '../constants';
 import { useAuth } from '../hooks/useAuth';
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import toast from 'react-hot-toast';
 
-interface AuthScreenProps {
-  onLogin: (profile: any, children: any[]) => void;
-}
+interface AuthScreenProps {}
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = () => {
   const { signInWithGoogle, createProfile, user, userProfile } = useAuth();
   const [showSetupForm, setShowSetupForm] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);

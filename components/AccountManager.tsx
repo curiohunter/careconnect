@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import { AuthService } from '../services/authService';
-import { auth, db } from '../firebase';
+import { db } from '../firebase';
 import { deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { doc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { Modal } from './Modal';
-import { AlertCircleIcon } from './icons/AlertCircleIcon';
 import toast from 'react-hot-toast';
 
 interface AccountManagerProps {
@@ -15,7 +13,7 @@ interface AccountManagerProps {
 }
 
 export const AccountManager: React.FC<AccountManagerProps> = ({ isOpen, onClose }) => {
-  const { user, userProfile, signOut } = useAuth();
+  const { user, userProfile } = useAuth();
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -132,7 +130,7 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ isOpen, onClose 
       setIsDeleting(true);
       
       // 재인증
-      const credential = EmailAuthProvider.credential(userProfile.email, password);
+      const credential = EmailAuthProvider.credential(userProfile.email || '', password);
       await reauthenticateWithCredential(user, credential);
       
       // 재인증 후 Firebase Auth에서 사용자 삭제
@@ -182,9 +180,9 @@ export const AccountManager: React.FC<AccountManagerProps> = ({ isOpen, onClose 
             <div>
               <span className="text-gray-600">가입일:</span>{' '}
               <span className="text-gray-900 font-medium">
-                {userProfile.createdAt && userProfile.createdAt.toDate ? 
-                  userProfile.createdAt.toDate().toLocaleDateString() :
-                  userProfile.createdAt ? new Date(userProfile.createdAt).toLocaleDateString() : '정보 없음'
+                {userProfile.createdAt && typeof userProfile.createdAt === 'object' && 'toDate' in userProfile.createdAt ? 
+                  (userProfile.createdAt as any).toDate().toLocaleDateString() :
+                  userProfile.createdAt ? new Date(userProfile.createdAt as any).toLocaleDateString() : '정보 없음'
                 }
               </span>
             </div>

@@ -40,7 +40,7 @@ const AppRouter: React.FC = () => {
 
   // 로그인했지만 프로필이 없는 경우 프로필 설정 화면으로
   if (user && !userProfile) {
-    return <NewAuthScreen onLogin={() => {}} />;
+    return <NewAuthScreen />;
   }
 
   return (
@@ -48,7 +48,7 @@ const AppRouter: React.FC = () => {
       <Routes>
         <Route 
           path="/auth" 
-          element={(user && userProfile) ? <Navigate to="/" replace /> : <NewAuthScreen onLogin={() => {}} />} 
+          element={(user && userProfile) ? <Navigate to="/" replace /> : <NewAuthScreen />} 
         />
         <Route 
           path="/" 
