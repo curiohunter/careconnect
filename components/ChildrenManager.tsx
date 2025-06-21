@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChildInfo, Gender, InstitutionType, UserType } from '../types';
-import { USER_TYPES, GENDER_OPTIONS, INSTITUTION_TYPE_OPTIONS } from '../constants';
+import { ChildInfo, Gender, InstitutionType } from '../types';
+import { GENDER_OPTIONS, INSTITUTION_TYPE_OPTIONS } from '../constants';
 import { useAuth } from '../hooks/useAuth';
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -172,7 +172,7 @@ export const ChildrenManager: React.FC<ChildrenManagerProps> = ({ isOpen, onClos
                         <input
                           type="number"
                           value={child.age || ''}
-                          onChange={(e) => handleChildChange(index, 'age', parseInt(e.target.value) || undefined)}
+                          onChange={(e) => handleChildChange(index, 'age', e.target.value ? parseInt(e.target.value) : 0)}
                           className={inputBaseClasses}
                           placeholder="나이"
                         />

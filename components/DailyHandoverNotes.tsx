@@ -38,13 +38,6 @@ const formatDateLocal = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-// 요일과 날짜 표시 함수
-const formatDayWithDate = (dayName: string, date: Date): string => {
-  const month = date.getMonth() + 1;
-  const dayOfMonth = date.getDate();
-  return `${dayName} ${month}/${dayOfMonth}`;
-};
-
 import toast from 'react-hot-toast';
 
 interface DailyHandoverNotesProps {

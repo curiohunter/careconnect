@@ -153,7 +153,7 @@ export const ConnectionSelector: React.FC<ConnectionSelectorProps> = ({ classNam
               <div className="px-4 py-2 text-xs font-semibold text-gray-600 bg-gray-50/80 border-b border-gray-200">
                 가족 연결 목록
               </div>
-              {sortedConnections.map((connection, index) => {
+              {sortedConnections.map((connection) => {
                 const isPrimary = userProfile?.primaryConnectionId === connection.id;
                 return (
                   <div
@@ -222,7 +222,7 @@ export const ConnectionSelector: React.FC<ConnectionSelectorProps> = ({ classNam
               <div className="px-5 py-3 text-sm font-semibold text-gray-700 bg-gradient-to-r from-gray-50 to-blue-50 border-b border-gray-200">
                 🏠 가족 연결 목록
               </div>
-              {sortedConnections.map((connection, index) => {
+              {sortedConnections.map((connection) => {
                 const isPrimary = userProfile?.primaryConnectionId === connection.id;
                 return (
                   <div

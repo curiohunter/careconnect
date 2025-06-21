@@ -19,16 +19,12 @@ import ConnectionSelector from './ConnectionSelector';
 import { logger } from '../errorMonitor';
 
 export const Dashboard: React.FC = () => {
-  const { user, userProfile, connection, connections, activeConnectionId, switchConnection, signOut } = useAuth();
+  const { userProfile, connection, connections, activeConnectionId, switchConnection, signOut } = useAuth();
   const {
     children: allChildren,
-    mealPlan,
     medications,
     specialScheduleItems,
-    workSchedule,
     loading: dataLoading,
-    saveChildren,
-    updateMealPlan,
     addMedication,
     updateMedication,
     deleteMedication,
@@ -36,13 +32,10 @@ export const Dashboard: React.FC = () => {
     addSpecialScheduleItem,
     updateSpecialScheduleItem,
     deleteSpecialScheduleItem,
-    currentWeekSchedules,
     loadCurrentWeekSchedules,
-    updateDailySchedule,
     currentWeekMealPlans,
     loadCurrentWeekMealPlans,
     updateDateBasedMealPlan,
-    checkAndMigrateMealPlan,
     recurringTemplates,
     loadRecurringTemplates,
     saveRecurringTemplate,

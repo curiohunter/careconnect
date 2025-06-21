@@ -246,7 +246,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = () => {
                         type="number"
                         placeholder="나이 (세)"
                         value={child.age || ''}
-                        onChange={(e) => handleChildChange(index, 'age', parseInt(e.target.value) || undefined)}
+                        onChange={(e) => handleChildChange(index, 'age', e.target.value ? parseInt(e.target.value) : 0)}
                         className={inputBaseClasses}
                       />
                       <select
