@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "careconnect-444da",
     "public": "dist",
     "ignore": [
       "firebase.json",
