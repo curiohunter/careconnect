@@ -1,152 +1,284 @@
-# CareConnect (케어커넥트)
+# 🏠 CareConnect (케어커넥트)
+### 돌봄 선생님과 부모를 연결하는 스마트 육아 관리 플랫폼
 
-돌봄 선생님과 부모 간의 통합 정보 공유 앱
+---
 
-## 🚀 프로젝트 개요
+## 📱 **CareConnect가 무엇인가요?**
 
-CareConnect는 돌봄 선생님과 부모 사이의 원활한 정보 공유를 통해 아이돌봄의 질을 향상시키고, 모든 필수 정보를 단일 화면에서 효율적으로 관리할 수 있는 통합 플랫폼입니다.
+CareConnect는 **돌봄 선생님과 부모가 아이의 일상을 함께 관리**할 수 있도록 도와주는 통합 플랫폼입니다. 
 
-## ✨ 주요 기능
+🎯 **이런 고민 있으셨나요?**
+- "아이가 오늘 어린이집에서 뭘 했을까?"
+- "내일 투약해야 하는데 돌봄 선생님께 어떻게 전달하지?"
+- "연장 보육이 필요한데 미리 말씀드려야 하는데..."
+- "이번 주 식단은 어떻게 되지?"
 
-### 👥 사용자 관리
-- **이메일 기반 회원가입/로그인**
-- **사용자 유형 구분** (부모/돌봄 선생님)
-- **초대 코드를 통한 연결 시스템**
+**CareConnect가 이 모든 걱정을 해결해드립니다!** 💙
 
-### 📅 일정 관리
-- **주간 아이 일정표** (기관 활동 + 하원 후 활동)
-- **실시간 일정 동기화**
-- **다중 아이 지원**
+---
 
-### 🍽️ 식사 관리
-- **주간 식사 메뉴 계획**
-- **특이사항 및 알러지 정보**
+## ✨ **주요 기능**
 
-### 💊 투약 관리
-- **투약 정보 등록** (증상, 약 종류, 용량, 시간, 보관방법)
-- **투약 완료 체크리스트**
-- **실시간 상태 업데이트**
+### 👥 **간편한 연결 시스템**
+- **초대 코드**로 돌봄 선생님과 부모를 쉽게 연결
+- **여러 명의 돌봄 선생님**과 동시 연결 가능
+- **안전한 이메일 로그인**으로 개인정보 보호
 
-### 🕐 근무 관리
-- **기본 근무 일정 설정** (돌봄 선생님용)
-- **연장 근무 요청**
-- **휴가 신청**
-- **안내사항 공유**
-
-## 🛠️ 기술 스택
-
-- **Frontend**: React 19.1.0 + TypeScript
-- **Routing**: React Router DOM 7.6.2
-- **Styling**: Tailwind CSS (Utility Classes)
-- **Backend**: Firebase
-  - Authentication (이메일/비밀번호)
-  - Firestore (실시간 데이터베이스)
-  - Cloud Messaging (푸시 알림)
-- **State Management**: React Hooks + Context API
-- **UI Components**: Custom Components + Lucide React Icons
-- **Notifications**: React Hot Toast
-- **Build Tool**: Vite 6.2.0
-
-## 📱 프로젝트 구조
-
+### 📅 **실시간 일정 관리**
 ```
-src/
-├── components/           # UI 컴포넌트
-│   ├── icons/           # 아이콘 컴포넌트
-│   ├── AuthScreen.tsx   # 로그인/회원가입
-│   ├── Dashboard.tsx    # 메인 대시보드
-│   ├── TopSection.tsx   # 주간 일정 섹션
-│   ├── MiddleSection.tsx # 식사/투약 섹션
-│   ├── BottomSection.tsx # 근무 관리 섹션
-│   └── ...
-├── hooks/               # Custom Hooks
-│   ├── useAuth.tsx      # 인증 관리
-│   └── useData.ts       # 데이터 관리
-├── services/            # Firebase 서비스
-│   ├── authService.ts   # 인증 서비스
-│   └── dataService.ts   # 데이터 서비스
-├── types.ts             # TypeScript 타입 정의
-├── constants.ts         # 상수 정의
-├── firebase.ts          # Firebase 설정
-└── App.tsx             # 메인 앱 컴포넌트
+📚 기관 활동: 어린이집, 유치원, 학교 일정
+🎨 하원 후 활동: 학원, 놀이 시간 등
+⏰ 실시간 동기화: 변경사항 즉시 반영
+📱 모바일 최적화: 언제 어디서나 확인 가능
 ```
 
-## 🔥 Firebase 설정 필요 사항
+### 🍽️ **스마트 식사 계획**
+- **주간 메뉴 계획** 미리 확인
+- **알레르기 정보** 및 특이사항 공유
+- **식사 준비** 미리미리 계획
 
-Firebase Studio에서 자동으로 설정해야 할 서비스들:
+### 💊 **안전한 투약 관리**
+- **투약 정보 상세 기록** (증상, 약 종류, 용량, 시간)
+- **투약 완료 체크** 실시간 확인
+- **보관 방법** 명시로 안전 관리
+- **당일 투약 현황** 한눈에 파악
 
-### Authentication
-- Email/Password 인증 활성화
-- 사용자 등록 허용
+### 🕐 **유연한 근무 관리**
+- **기본 근무 일정** 설정 및 관리
+- **연장 근무 요청** 사전 협의
+- **휴가 신청** 간편하게
+- **안내사항** 실시간 공유
 
-### Firestore Database
-컬렉션 구조:
+### 📝 **간편한 인수인계**
+- **일일 메모** 기능으로 당일 특이사항 공유
+- **실시간 알림**으로 놓치지 않는 소통
+
+---
+
+## 🚀 **CareConnect의 특별함**
+
+### ⚡ **One-Screen 디자인**
+모든 정보를 **단 하나의 화면**에서 확인! 탭을 이리저리 눌러댈 필요가 없어요.
+
+### 🔄 **실시간 동기화**
+한 사람이 정보를 업데이트하면 **모든 연결된 사용자에게 즉시 반영**됩니다.
+
+### 📱 **모바일 퍼스트**
+스마트폰에서 사용하기 편하도록 설계되었습니다. (데스크톱에서도 물론 완벽!)
+
+### 🔒 **프라이버시 우선**
+- Firebase 기반 **기업급 보안**
+- **연결된 사용자끼리만** 정보 공유
+- **개인정보 최소 수집** 원칙
+
+---
+
+## 📱 **사용법**
+
+### 1️⃣ **회원가입 & 로그인**
 ```
-users/              # 사용자 프로필
-connections/        # 부모-돌봄선생님 연결
-inviteCodes/        # 초대 코드
-children/           # 아이 정보
-weeklySchedules/    # 주간 일정
-mealPlans/          # 식사 계획
-medications/        # 투약 정보
-specialSchedules/   # 특별 일정 (연장근무, 휴가, 안내)
-workSchedules/      # 기본 근무 일정
-```
-
-### Cloud Messaging (FCM)
-- 웹 푸시 알림 설정
-- VAPID 키 생성
-
-### Security Rules
-- 사용자 인증 기반 접근 제어
-- 연결된 사용자 간 데이터 공유만 허용
-
-## 🚀 배포 준비
-
-이 프로젝트는 Firebase Hosting으로 배포 가능하도록 설정되어 있습니다:
-
-- **PWA 지원** (추가 설정 필요)
-- **반응형 디자인**
-- **오프라인 지원** (Service Worker 추가 예정)
-
-## 📋 환경 변수 설정
-
-Firebase Studio에서 자동 생성할 환경 변수들:
-```
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
-VITE_FIREBASE_MEASUREMENT_ID=
-VITE_FIREBASE_VAPID_KEY=
+📧 이메일로 간편 회원가입
+👤 사용자 유형 선택 (부모 or 돌봄 선생님)
+✏️ 기본 프로필 설정
 ```
 
-## 🎯 핵심 특징
+### 2️⃣ **연결하기**
+```
+🎫 돌봄 선생님: 초대 코드 생성
+🔗 부모: 초대 코드 입력하여 연결
+👶 아이 정보 등록 및 공유
+```
 
-- **실시간 동기화**: 모든 데이터 변경사항이 즉시 반영
-- **단일 페이지 인터페이스**: 탭 전환 없이 모든 정보 접근
-- **모바일 최적화**: 반응형 디자인으로 모든 기기 지원
-- **직관적 UX**: 별도 튜토리얼 없이도 사용 가능
-- **보안**: Firebase 기반 안전한 데이터 관리
-
-## 🔧 설치 및 실행
-
-```bash
-# 의존성 설치
-npm install
-
-# 개발 서버 실행
-npm run dev
-
-# 빌드
-npm run build
-
-# 미리보기
-npm run preview
+### 3️⃣ **일상 관리 시작**
+```
+📅 주간 일정 확인 및 수정
+🍽️ 식사 계획 공유
+💊 투약 정보 등록
+📝 일일 메모 작성
 ```
 
 ---
 
-**Firebase Studio에서 이 프로젝트를 분석하고 자동으로 Firebase 설정을 생성해주세요!** 🔥
+## 🛠️ **기술 정보** (개발자용)
+
+### **프론트엔드**
+- ⚛️ **React 19.1.0** + TypeScript
+- 🎨 **Tailwind CSS** (유틸리티 우선 스타일링)
+- 🌐 **React Router DOM 7.6.2** (페이지 라우팅)
+- 🔥 **React Hot Toast** (알림 시스템)
+
+### **백엔드 & 인프라**
+- 🔥 **Firebase 10.8.0**
+  - 🔐 Authentication (이메일/비밀번호)
+  - 📊 Firestore (실시간 NoSQL 데이터베이스)
+  - 📤 Cloud Messaging (푸시 알림)
+  - 🌐 Hosting (웹 호스팅)
+- ⚡ **Vite 6.2.0** (번들러)
+
+### **아키텍처**
+```
+src/
+├── 🎨 components/          # UI 컴포넌트
+│   ├── 🔐 AuthScreen.tsx   # 로그인/회원가입
+│   ├── 🏠 Dashboard.tsx    # 메인 대시보드
+│   ├── 📅 TopSection.tsx   # 주간 일정 섹션
+│   ├── 🍽️ MiddleSection.tsx # 식사/투약 섹션
+│   ├── 🕐 BottomSection.tsx # 근무 관리 섹션
+│   └── 📱 icons/           # 아이콘 컴포넌트
+├── 🪝 hooks/              # Custom React Hooks
+│   ├── 🔐 useAuth.tsx      # 인증 관리
+│   └── 📊 useData.ts       # 데이터 관리
+├── 🔧 services/           # Firebase 서비스
+│   ├── 🔐 authService.ts   # 인증 서비스
+│   └── 📊 dataService.ts   # 데이터 서비스
+├── 📝 types.ts            # TypeScript 타입 정의
+├── 🔧 constants.ts        # 상수 정의
+├── 🔥 firebase.ts         # Firebase 설정
+└── 🚀 App.tsx            # 메인 앱 컴포넌트
+```
+
+---
+
+## 📊 **데이터 구조**
+
+### **Firestore 컬렉션**
+```
+👥 users/              # 사용자 프로필
+🔗 connections/        # 부모-돌봄선생님 연결 정보
+🎫 inviteCodes/        # 초대 코드 관리
+👶 children/           # 아이 정보
+📅 weeklySchedules/    # 주간 일정
+🍽️ mealPlans/          # 식사 계획
+💊 medications/        # 투약 정보
+⏰ specialSchedules/   # 특별 일정 (연장근무, 휴가, 안내)
+🕐 workSchedules/      # 기본 근무 일정
+📝 handoverNotes/      # 인수인계 메모
+```
+
+---
+
+## 🔧 **설치 및 실행** (개발자용)
+
+### **필요 조건**
+- Node.js 18+ 
+- npm 또는 yarn
+- Firebase 프로젝트
+
+### **로컬 개발 환경 설정**
+```bash
+# 1. 프로젝트 클론
+git clone [repository-url]
+cd careconnect
+
+# 2. 의존성 설치
+npm install
+
+# 3. 환경변수 설정
+cp .env.local.example .env.local
+# Firebase 설정 정보 입력
+
+# 4. 개발 서버 실행
+npm run dev
+```
+
+### **빌드 및 배포**
+```bash
+# 타입 검사
+npm run type-check
+
+# 프로덕션 빌드
+npm run build:prod
+
+# 프로덕션 배포 (Firebase)
+npm run deploy:prod
+```
+
+---
+
+## 🔒 **보안 및 프라이버시**
+
+### **데이터 보호**
+- ✅ **Firebase 기업급 보안** 적용
+- ✅ **HTTPS 강제 적용**
+- ✅ **사용자 인증 기반** 접근 제어
+- ✅ **연결된 사용자 간에만** 데이터 공유
+
+### **개인정보 처리**
+- ✅ **최소 수집 원칙**: 서비스에 꼭 필요한 정보만 수집
+- ✅ **안전한 저장**: Firebase 보안 규칙 적용
+- ✅ **투명한 처리**: 수집/이용 목적 명시
+
+---
+
+## 💰 **운영 비용** (참고용)
+
+Firebase Blaze Plan 기준 예상 월 비용:
+- 👥 **100명 사용자**: 약 8,000원
+- 👥 **1,000명 사용자**: 약 25,000원  
+- 👥 **5,000명 사용자**: 약 92,000원
+
+*실제 비용은 사용량에 따라 달라질 수 있습니다.*
+
+---
+
+## 🆘 **문제 해결**
+
+### **로그인이 안 돼요**
+- ✅ 이메일 주소가 정확한지 확인
+- ✅ 비밀번호가 맞는지 확인
+- ✅ 인터넷 연결 상태 확인
+
+### **초대 코드가 안 먹혀요**
+- ✅ 초대 코드를 정확히 입력했는지 확인
+- ✅ 코드가 만료되지 않았는지 확인
+- ✅ 이미 사용된 코드인지 확인
+
+### **데이터가 동기화되지 않아요**
+- ✅ 인터넷 연결 상태 확인
+- ✅ 페이지 새로고침 시도
+- ✅ 브라우저 캐시 삭제 후 재접속
+
+---
+
+## 📞 **지원 및 문의**
+
+### **기술 지원**
+- 📧 이메일: [기술지원 이메일 주소]
+- 💬 채팅: [지원 채팅 링크]
+
+### **기능 요청 및 버그 리포트**
+- 🐛 GitHub Issues: [GitHub 이슈 링크]
+- 📋 피드백 폼: [피드백 폼 링크]
+
+---
+
+## 🎉 **앞으로의 계획**
+
+### **v2.0 계획 기능**
+- 📸 **사진 공유**: 아이의 일상 사진 공유 기능
+- 📊 **통계 대시보드**: 성장 기록 및 활동 통계
+- 🔔 **스마트 알림**: 맞춤형 푸시 알림 시스템
+- 🎨 **테마 커스터마이징**: 개인화된 UI 테마
+- 📱 **모바일 앱**: 네이티브 앱 출시
+
+---
+
+## ❤️ **함께 만들어가요**
+
+CareConnect는 **실제 돌봄 현장의 목소리**를 반영하여 지속적으로 개선되고 있습니다.
+
+🙏 **여러분의 피드백이 CareConnect를 더 좋게 만듭니다!**
+
+---
+
+<div align="center">
+
+### 🌟 **CareConnect로 더 나은 돌봄 환경을 만들어보세요!** 🌟
+
+**지금 시작하기** → [CareConnect 바로가기](https://careconnect-444da.web.app)
+
+---
+
+*Made with ❤️ by CareConnect Team*
+
+</div>
