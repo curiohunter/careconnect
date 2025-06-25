@@ -344,7 +344,7 @@ export const useData = () => {
         [date]: mealPlan
       }));
       
-      toast.success('식사 계획이 업데이트되었습니다.');
+      // toast.success 메시지 제거 - MealPlanEditor에서 한 번만 표시
     } catch (error) {
       logger.error(error as Error, 'useData', 'updateDateBasedMealPlan');
       toast.error('식사 계획 업데이트에 실패했습니다.');

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DateRangeMealPlan, DailyMealPlanNew, UserType } from '../types';
 import { DAYS_OF_WEEK } from '../constants';
+import toast from 'react-hot-toast';
 // 요일과 날짜 표시 함수
 const formatDayWithDate = (dayName: string, date: Date): string => {
   const month = date.getMonth() + 1;
@@ -61,26 +62,48 @@ export const MealPlanEditor: React.FC<MealPlanEditorProps> = ({
     setLocalMealPlans(currentWeekMealPlans);
   }, [currentWeekMealPlans]);
 
-  // 입력값 변경 핸들러
+  // 입력값 변경 핸들러 - undefined 값 방지
   const handleChange = (date: string, field: 'menu' | 'notes', value: string) => {
-    setLocalMealPlans(prev => ({
-      ...prev,
-      [date]: {
-        ...prev[date],
-        date,
-        [field]: value,
-        createdAt: prev[date]?.createdAt || new Date(),
-        updatedAt: new Date()
-      }
-    }));
+    setLocalMealPlans(prev => {
+      const existingPlan = prev[date] || { menu: '', notes: '' };
+      return {
+        ...prev,
+        [date]: {
+          ...existingPlan,
+          date,
+          [field]: value || '', // undefined 대신 빈 문자열
+          createdAt: existingPlan.createdAt || new Date(),
+          updatedAt: new Date()
+        }
+      };
+    });
   };
 
-  // onBlur에서만 onUpdate 호출
-  const handleBlur = (date: string) => {
-    const mealPlan = localMealPlans[date];
-    if (mealPlan) {
-      onUpdate(date, mealPlan);
+  // 저장 버튼 클릭 시 안전한 데이터 처리
+  const handleSave = () => {
+    let savedCount = 0;
+    
+    Object.keys(localMealPlans).forEach(date => {
+      const mealPlan = localMealPlans[date];
+      if (mealPlan && (mealPlan.menu?.trim() || mealPlan.notes?.trim())) {
+        // undefined 값 제거 및 안전한 데이터 처리
+        const safeMealPlan = {
+          ...mealPlan,
+          menu: mealPlan.menu || '',
+          notes: mealPlan.notes || ''
+        };
+        
+        onUpdate(date, safeMealPlan);
+        savedCount++;
+      }
+    });
+    
+    // 저장 완료 후 한 번만 메시지 (선택적)
+    if (savedCount > 0) {
+      toast.success(`식사 계획 ${savedCount}일분 저장 완료`);
     }
+    
+    onEditModeChange?.(false);
   };
 
   return (
@@ -102,7 +125,7 @@ export const MealPlanEditor: React.FC<MealPlanEditorProps> = ({
                 </button>
               )}
               <button
-                onClick={() => onEditModeChange(!isEditing)}
+                onClick={isEditing ? handleSave : () => onEditModeChange(!isEditing)}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   isEditing 
                     ? 'bg-accent text-white hover:bg-amber-600' 
@@ -152,7 +175,6 @@ export const MealPlanEditor: React.FC<MealPlanEditorProps> = ({
                       <textarea
                         value={mealPlan?.menu || ''}
                         onChange={(e) => handleChange(dateString, 'menu', e.target.value)}
-                        onBlur={() => handleBlur(dateString)}
                         placeholder="오늘의 메뉴를 입력하세요"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
                         rows={2}
@@ -168,7 +190,6 @@ export const MealPlanEditor: React.FC<MealPlanEditorProps> = ({
                       <textarea
                         value={mealPlan?.notes || ''}
                         onChange={(e) => handleChange(dateString, 'notes', e.target.value)}
-                        onBlur={() => handleBlur(dateString)}
                         placeholder="특이사항을 입력하세요"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
                         rows={2}
