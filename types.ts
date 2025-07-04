@@ -203,6 +203,7 @@ export enum RequestStatus {
 export interface SpecialScheduleItem {
   id: string;
   date: string; // 기본 날짜 (연장근무, 안내사항용)
+  dates?: string[]; // 연장근무 다중 날짜 (YYYY-MM-DD 형식 배열)
   startDate?: string; // 휴가 시작일 (YYYY-MM-DD)
   endDate?: string; // 휴가 종료일 (YYYY-MM-DD)
   type: 'VACATION' | 'OVERTIME_REQUEST' | 'NOTICE';
@@ -216,6 +217,7 @@ export interface SpecialScheduleItem {
   readBy?: Record<string, Date>; // { userId: readTimestamp } 형태로 읽음 확인
   creatorUserType?: UserType;
   createdBy?: string; // 작성자 ID
+  createdByName?: string; // 작성자 이름 (표시용)
   connectionId?: string; // 연결 ID
   createdAt?: Date;
   updatedAt?: Date;

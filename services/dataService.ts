@@ -1252,16 +1252,29 @@ export class DataService {
    */
   static async addSpecialScheduleItemWithPermissionByParentId(parentId: string, item: Omit<SpecialScheduleItem, 'id'>, requesterId: string, targetUserId?: string) {
     try {
+      // Get user profile to include creator's name
+      const userDoc = await getDoc(doc(db, 'users', requesterId));
+      const userProfile = userDoc.exists() ? userDoc.data() : null;
+      
       // Clean data to remove undefined fields
       const cleanedItem = DataService.cleanSpecialScheduleItem(item);
       const cleanedData: any = {
         ...cleanedItem,
         parentId,
         createdBy: requesterId,
+        createdByName: userProfile?.name || '', // Add creator's name
         status: 'PENDING',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
+      
+      // Handle multiple dates for overtime requests
+      if (item.type === 'OVERTIME_REQUEST' && item.dates && item.dates.length > 0) {
+        // Use first date as the primary date for compatibility
+        cleanedData.date = item.dates[0];
+        // Store all dates in the dates array
+        cleanedData.dates = item.dates;
+      }
       
       // Only add targetUserId if it's defined and not empty
       if (targetUserId && targetUserId.trim() !== '') {

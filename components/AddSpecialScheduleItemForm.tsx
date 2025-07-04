@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { SpecialScheduleItem, UserType, Connection } from '../types';
+import { XMarkIcon } from './icons/XMarkIcon';
+import { PlusIcon } from './icons/PlusIcon';
 
 // 시간 드롭다운 생성 (시/분 분리)
 const generateHourOptions = () => {
@@ -42,6 +44,24 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
   const [endMinute, setEndMinute] = useState(itemToEdit?.endTime?.split(':')[1] || '');
   // targetUserType 삭제됨 - 휴가는 항상 돌보선생님이 신청
   const [targetUserId, setTargetUserId] = useState<string>(itemToEdit?.targetUserId || ''); // 연장근무 담당자 ID
+  
+  // 다중 날짜 선택을 위한 상태 (연장근무용)
+  const [dates, setDates] = useState<string[]>(
+    itemToEdit?.dates || (type === 'OVERTIME_REQUEST' && date ? [date] : [])
+  );
+
+  // 날짜 추가 함수
+  const addDate = (newDate: string) => {
+    if (!dates.includes(newDate)) {
+      const updatedDates = [...dates, newDate].sort();
+      setDates(updatedDates);
+    }
+  };
+
+  // 날짜 삭제 함수
+  const removeDate = (dateToRemove: string) => {
+    setDates(dates.filter(d => d !== dateToRemove));
+  };
 
   // 권한 기반 UI 제어
   const canCreateType = (requestType: string) => {
@@ -122,6 +142,11 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
     
     // 연장근무 검증
     if (type === 'OVERTIME_REQUEST') {
+      // 다중 날짜 선택 검증
+      if (dates.length === 0) {
+        alert('연장 근무 요청 시 최소 하나 이상의 날짜를 선택해주세요.');
+        return;
+      }
       if (!startHour || !startMinute || !endHour || !endMinute) {
         alert('연장 근무 요청 시 시작 시간과 종료 시간은 필수입니다.');
         return;
@@ -133,7 +158,7 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
     }
 
     const itemData: Omit<SpecialScheduleItem, 'id'> = {
-      date: type === 'VACATION' ? endDate : date, // 휴가는 종료일을 기본 날짜로
+      date: type === 'VACATION' ? endDate : (type === 'OVERTIME_REQUEST' && dates.length > 0 ? dates[0] : date), // 연장근무는 첫 번째 날짜, 휴가는 종료일
       type,
       title,
       details,
@@ -151,6 +176,10 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
       itemData.endTime = `${endHour}:${endMinute}`;
       if (targetUserId) {
         itemData.targetUserId = targetUserId;
+      }
+      // 다중 날짜 배열 추가
+      if (dates.length > 0) {
+        itemData.dates = dates;
       }
     }
     
@@ -187,15 +216,72 @@ export const AddSpecialScheduleItemForm: React.FC<AddSpecialScheduleItemFormProp
     <form onSubmit={handleSubmit} className="space-y-4">
       {type !== 'VACATION' && (
         <div>
-          <label htmlFor="date" className="block text-sm font-medium text-gray-700">날짜</label>
-          <input
-            type="date"
-            id="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
-            required
-          />
+          <label htmlFor="date" className="block text-sm font-medium text-gray-700">
+            {type === 'OVERTIME_REQUEST' ? '날짜 선택' : '날짜'}
+          </label>
+          {type === 'OVERTIME_REQUEST' ? (
+            <>
+              <div className="flex gap-2 mt-1">
+                <input
+                  type="date"
+                  id="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (date && dates.length < 7) {
+                      addDate(date);
+                    }
+                  }}
+                  disabled={!date || dates.includes(date) || dates.length >= 7}
+                  className="px-3 py-2 bg-primary text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  추가
+                </button>
+              </div>
+              
+              {/* 선택된 날짜 목록 */}
+              {dates.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-sm text-gray-600 mb-2">선택된 날짜 ({dates.length}/7)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {dates.map((selectedDate) => (
+                      <span
+                        key={selectedDate}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                      >
+                        {new Date(selectedDate).toLocaleDateString('ko-KR', {
+                          month: 'numeric',
+                          day: 'numeric'
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => removeDate(selectedDate)}
+                          className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                        >
+                          <XMarkIcon className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <input
+              type="date"
+              id="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+              required
+            />
+          )}
         </div>
       )}
       

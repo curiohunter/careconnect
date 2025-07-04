@@ -28,19 +28,39 @@ export const BottomSection: React.FC<BottomSectionProps> = ({
 
   // 작성자 이름 가져오기 함수
   const getAuthorName = (item: SpecialScheduleItem): string => {
+    // createdByName이 있으면 우선 사용
+    if (item.createdByName) {
+      return item.createdByName;
+    }
+    
     // 본인이 작성한 경우
     if (item.createdBy === user?.uid) {
       return userProfile?.name || '본인';
     }
     
-    // 연결된 상대방이 작성한 경우
+    // 다중 연결에서 작성자 찾기
+    if (connections && connections.length > 0) {
+      for (const conn of connections) {
+        // 작성자가 부모인 경우
+        if (item.createdBy === conn.parentId) {
+          return conn.parentProfile?.name || '부모님';
+        }
+        // 작성자가 돌봄선생님인 경우
+        if (item.createdBy === conn.careProviderId) {
+          return conn.careProviderProfile?.name || '돌봄선생님';
+        }
+      }
+    }
+    
+    // 단일 연결 환경 (하위 호환성)
     if (connection) {
-      if (userType === UserType.PARENT) {
-        // 부모인 경우 돌봄선생님 이름 표시
-        return connection.careProviderProfile?.name || '돌봄선생님';
-      } else {
-        // 돌봄선생님인 경우 부모 이름 표시
+      // 작성자가 부모인 경우
+      if (item.createdBy === connection.parentId) {
         return connection.parentProfile?.name || '부모님';
+      }
+      // 작성자가 돌봄선생님인 경우
+      if (item.createdBy === connection.careProviderId) {
+        return connection.careProviderProfile?.name || '돌봄선생님';
       }
     }
     
@@ -137,8 +157,12 @@ export const BottomSection: React.FC<BottomSectionProps> = ({
       return typePriorityA - typePriorityB;
     }
     
-    // 2. 같은 타입이면 날짜 역순으로 정렬 (최신 날짜 먼저)
-    return new Date(b.date).getTime() - new Date(a.date).getTime();
+    // 2. 같은 타입이면 날짜 오름차순으로 정렬 (오래된 날짜 먼저)
+    // 휴가의 경우 시작일 기준으로 정렬
+    const dateA = a.type === 'VACATION' && a.startDate ? new Date(a.startDate) : new Date(a.date);
+    const dateB = b.type === 'VACATION' && b.startDate ? new Date(b.startDate) : new Date(b.date);
+    
+    return dateA.getTime() - dateB.getTime();
   });
 
   return (
@@ -209,6 +233,15 @@ export const BottomSection: React.FC<BottomSectionProps> = ({
                           {/* 휴가 기간 표시 */}
                           {item.type === 'VACATION' && item.startDate && item.endDate ? (
                               <span>기간: {new Date(item.startDate).toLocaleDateString()} ~ {new Date(item.endDate).toLocaleDateString()}</span>
+                          ) : item.type === 'OVERTIME_REQUEST' && item.dates && item.dates.length > 1 ? (
+                              // 연장근무 다중 날짜 표시
+                              <span>
+                                날짜: {item.dates.slice(0, 3).map(date => {
+                                  const d = new Date(date);
+                                  return `${d.getMonth() + 1}/${d.getDate()}`;
+                                }).join(', ')}
+                                {item.dates.length > 3 && ` 외 ${item.dates.length - 3}개`}
+                              </span>
                           ) : (
                               <span>날짜: {itemDate.toLocaleDateString()}</span>
                           )}
